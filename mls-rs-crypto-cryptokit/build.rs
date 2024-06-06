@@ -7,9 +7,10 @@ fn main() {}
 use swift_rs::SwiftLinker;
 
 fn main() {
-      SwiftLinker::new("14.0")
-         // Only if you are also targetting iOS
-         // Ensure the same minimum supported iOS version is specified as in your `Package.swift` file
+    SwiftLinker::new("14.0")
+    // Only if you are also targetting iOS
+    // Ensure the same minimum supported iOS version is specified as in your `Package.swift` file
          .with_ios("17.0")
          .with_package("cryptokit-bridge", "./cryptokit-bridge")
          .link();
+}
