@@ -1,0 +1,14 @@
+[package]
+name = "mls-rs-uniffi-ios"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+ crate_type = ["cdylib", "staticlib"]
+ name = "mls_rs_uniffi_ios"
+
+[dependencies]
+uniffi = { git = "https://github.com/mozilla/uniffi-rs/", rev = "eeb785c", version = "0.27.0" }
+mls-rs-crypto-cryptokit = { version = "0.1.0", path = "../mls-rs-crypto-cryptokit" }
