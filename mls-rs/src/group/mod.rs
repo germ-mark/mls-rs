@@ -51,9 +51,6 @@ use crate::psk::{
     ResumptionPSKUsage, ResumptionPsk,
 };
 
-#[cfg(all(feature = "std", feature = "by_ref_proposal"))]
-use std::collections::HashMap;
-
 #[cfg(feature = "private_message")]
 use ciphertext_processor::*;
 
@@ -284,10 +281,16 @@ where
     epoch_secrets: EpochSecrets,
     private_tree: TreeKemPrivate,
     key_schedule: KeySchedule,
-    #[cfg(all(feature = "std", feature = "by_ref_proposal"))]
-    pending_updates: HashMap<HpkePublicKey, PendingUpdate>, // Hash of leaf node hpke public key to secret key
-    #[cfg(all(not(feature = "std"), feature = "by_ref_proposal"))]
-    pending_updates: Vec<(HpkePublicKey, PendingUpdate)>,
+// <<<<<<< HEAD
+    // #[cfg(all(feature = "std", feature = "by_ref_proposal"))]
+    // pending_updates: HashMap<HpkePublicKey, PendingUpdate>, // Hash of leaf node hpke public key to secret key
+    // #[cfg(all(not(feature = "std"), feature = "by_ref_proposal"))]
+    // pending_updates: Vec<(HpkePublicKey, PendingUpdate)>,
+// =======
+    #[cfg(feature = "by_ref_proposal")]
+    pending_updates:
+        crate::map::SmallMap<HpkePublicKey, PendingUpdate>, // Hash of leaf node hpke public key to secret key
+// >>>>>>> f4af668 (Simplify map conditional compilation (#158))
     pending_commit: Option<CommitGeneration>,
     #[cfg(feature = "psk")]
     previous_psk: Option<PskSecretInput>,
