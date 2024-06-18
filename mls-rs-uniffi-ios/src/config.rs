@@ -10,7 +10,7 @@ use mls_rs::{
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
 
 use self::group_state::{GroupStateStorage, GroupStateStorageAdapter};
-use crate::Error;
+use crate::MlSrsError;
 
 pub mod group_state;
 
@@ -26,7 +26,7 @@ impl From<Arc<dyn GroupStateStorage>> for ClientGroupStorage {
 #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
 #[cfg_attr(mls_build_async, maybe_async::must_be_async)]
 impl mls_rs_core::group::GroupStateStorage for ClientGroupStorage {
-    type Error = Error;
+    type Error = MlSrsError;
 
     async fn state(&self, group_id: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         self.0.state(group_id.to_vec()).await

@@ -54,7 +54,7 @@ fn arc_unwrap_or_clone<T: Clone>(arc: Arc<T>) -> T {
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 #[non_exhaustive]
-pub enum Error {
+pub enum MlSrsError {
     #[error("A mls-rs error occurred: {inner}")]
     MlsError {
         #[from]
@@ -77,7 +77,7 @@ pub enum Error {
     },
 }
 
-impl IntoAnyError for Error {}
+impl IntoAnyError for MlSrsError {}
 
 /// A [`mls_rs::crypto::SignaturePublicKey`] wrapper.
 #[derive(Clone, Debug, uniffi::Record)]
@@ -168,7 +168,7 @@ pub enum ProtocolVersion {
 }
 
 impl TryFrom<mls_rs::ProtocolVersion> for ProtocolVersion {
-    type Error = Error;
+    type Error = MlSrsError;
 
     fn try_from(version: mls_rs::ProtocolVersion) -> Result<Self, Self::Error> {
         match version {
@@ -299,7 +299,7 @@ impl From<CipherSuite> for mls_rs::CipherSuite {
 }
 
 impl TryFrom<mls_rs::CipherSuite> for CipherSuite {
-    type Error = Error;
+    type Error = MlSrsError;
 
     fn try_from(cipher_suite: mls_rs::CipherSuite) -> Result<Self, Self::Error> {
         match cipher_suite {
@@ -320,7 +320,7 @@ impl TryFrom<mls_rs::CipherSuite> for CipherSuite {
 #[uniffi::export]
 pub async fn generate_signature_keypair(
     cipher_suite: CipherSuite,
-) -> Result<SignatureKeypair, Error> {
+) -> Result<SignatureKeypair, MlSrsError> {
     let crypto_provider = mls_rs_crypto_cryptokit::CryptoKitProvider::default();
     let cipher_suite_provider = crypto_provider
         .cipher_suite_provider(cipher_suite.into())
@@ -392,12 +392,12 @@ impl Client {
     ///
     /// See [`mls_rs::Client::generate_key_package_message`] for
     /// details.
-    pub async fn generate_key_package_message(&self) -> Result<Message, Error> {
+    pub async fn generate_key_package_message(&self) -> Result<Message, MlSrsError> {
         let message = self.inner.generate_key_package_message().await?;
         Ok(message.into())
     }
 
-    pub fn signing_identity(&self) -> Result<Arc<SigningIdentity>, Error> {
+    pub fn signing_identity(&self) -> Result<Arc<SigningIdentity>, MlSrsError> {
         let (signing_identity, _) = self.inner.signing_identity()?;
         Ok(Arc::new(signing_identity.clone().into()))
     }
@@ -409,7 +409,7 @@ impl Client {
     ///
     /// See [`mls_rs::Client::create_group`] and
     /// [`mls_rs::Client::create_group_with_id`] for details.
-    pub async fn create_group(&self, group_id: Option<Vec<u8>>) -> Result<Group, Error> {
+    pub async fn create_group(&self, group_id: Option<Vec<u8>>) -> Result<Group, MlSrsError> {
         let extensions = mls_rs::ExtensionList::new();
         let inner = match group_id {
             Some(group_id) => {
@@ -434,7 +434,7 @@ impl Client {
         &self,
         ratchet_tree: Option<RatchetTree>,
         welcome_message: &Message,
-    ) -> Result<JoinInfo, Error> {
+    ) -> Result<JoinInfo, MlSrsError> {
         let ratchet_tree = ratchet_tree.map(TryInto::try_into).transpose()?;
         let (group, new_member_info) = self
             .inner
@@ -454,7 +454,7 @@ impl Client {
     /// Load an existing group.
     ///
     /// See [`mls_rs::Client::load_group`] for details.
-    pub async fn load_group(&self, group_id: Vec<u8>) -> Result<Group, Error> {
+    pub async fn load_group(&self, group_id: Vec<u8>) -> Result<Group, MlSrsError> {
         self.inner
             .load_group(&group_id)
             .await
@@ -471,18 +471,18 @@ pub struct RatchetTree {
 }
 
 impl TryFrom<mls_rs::group::ExportedTree<'_>> for RatchetTree {
-    type Error = Error;
+    type Error = MlSrsError;
 
-    fn try_from(exported_tree: mls_rs::group::ExportedTree<'_>) -> Result<Self, Error> {
+    fn try_from(exported_tree: mls_rs::group::ExportedTree<'_>) -> Result<Self, MlSrsError> {
         let bytes = exported_tree.to_bytes()?;
         Ok(Self { bytes })
     }
 }
 
 impl TryFrom<RatchetTree> for group::ExportedTree<'static> {
-    type Error = Error;
+    type Error = MlSrsError;
 
-    fn try_from(ratchet_tree: RatchetTree) -> Result<Self, Error> {
+    fn try_from(ratchet_tree: RatchetTree) -> Result<Self, MlSrsError> {
         group::ExportedTree::from_bytes(&ratchet_tree.bytes).map_err(Into::into)
     }
 }
@@ -508,9 +508,9 @@ pub struct CommitOutput {
 }
 
 impl TryFrom<mls_rs::group::CommitOutput> for CommitOutput {
-    type Error = Error;
+    type Error = MlSrsError;
 
-    fn try_from(commit_output: mls_rs::group::CommitOutput) -> Result<Self, Error> {
+    fn try_from(commit_output: mls_rs::group::CommitOutput) -> Result<Self, MlSrsError> {
         let commit_message = Arc::new(commit_output.commit_message.into());
         let welcome_message = commit_output
             .welcome_messages
@@ -575,7 +575,7 @@ impl Group {
 fn index_to_identity(
     group: &mls_rs::Group<UniFFIConfig>,
     index: u32,
-) -> Result<identity::SigningIdentity, Error> {
+) -> Result<identity::SigningIdentity, MlSrsError> {
     let member = group
         .member_at_index(index)
         .ok_or(MlsError::InvalidNodeIndex(index))?;
@@ -587,7 +587,7 @@ fn index_to_identity(
 #[cfg_attr(mls_build_async, maybe_async::must_be_async)]
 async fn signing_identity_to_identifier(
     signing_identity: &identity::SigningIdentity,
-) -> Result<Vec<u8>, Error> {
+) -> Result<Vec<u8>, MlSrsError> {
     let identifier = basic::BasicIdentityProvider::new()
         .identity(signing_identity, &mls_rs::ExtensionList::new())
         .await
@@ -601,7 +601,7 @@ async fn signing_identity_to_identifier(
 impl Group {
     /// Write the current state of the group to storage defined by
     /// [`ClientConfig::group_state_storage`]
-    pub async fn write_to_storage(&self) -> Result<(), Error> {
+    pub async fn write_to_storage(&self) -> Result<(), MlSrsError> {
         let mut group = self.inner().await;
         group.write_to_storage().await.map_err(Into::into)
     }
@@ -611,7 +611,7 @@ impl Group {
     /// This function is used to provide the current group tree to new
     /// members when `use_ratchet_tree_extension` is set to false in
     /// `ClientConfig`.
-    pub async fn export_tree(&self) -> Result<RatchetTree, Error> {
+    pub async fn export_tree(&self) -> Result<RatchetTree, MlSrsError> {
         let group = self.inner().await;
         group.export_tree().try_into()
     }
@@ -623,7 +623,7 @@ impl Group {
     ///
     /// Returns the resulting commit message. See
     /// [`mls_rs::Group::commit`] for details.
-    pub async fn commit(&self) -> Result<CommitOutput, Error> {
+    pub async fn commit(&self) -> Result<CommitOutput, MlSrsError> {
         let mut group = self.inner().await;
         let commit_output = group.commit(Vec::new()).await?;
         commit_output.try_into()
@@ -638,7 +638,7 @@ impl Group {
     pub async fn add_members(
         &self,
         key_packages: Vec<Arc<Message>>,
-    ) -> Result<CommitOutput, Error> {
+    ) -> Result<CommitOutput, MlSrsError> {
         let mut group = self.inner().await;
         let mut commit_builder = group.commit_builder();
         for key_package in key_packages {
@@ -657,7 +657,7 @@ impl Group {
     pub async fn propose_add_members(
         &self,
         key_packages: Vec<Arc<Message>>,
-    ) -> Result<Vec<Arc<Message>>, Error> {
+    ) -> Result<Vec<Arc<Message>>, MlSrsError> {
         let mut group = self.inner().await;
 
         let mut messages = Vec::with_capacity(key_packages.len());
@@ -678,7 +678,7 @@ impl Group {
     pub async fn remove_members(
         &self,
         signing_identities: &[Arc<SigningIdentity>],
-    ) -> Result<CommitOutput, Error> {
+    ) -> Result<CommitOutput, MlSrsError> {
         let mut group = self.inner().await;
 
         // Find member indices
@@ -706,7 +706,7 @@ impl Group {
     pub async fn propose_remove_members(
         &self,
         signing_identities: &[Arc<SigningIdentity>],
-    ) -> Result<Vec<Arc<Message>>, Error> {
+    ) -> Result<Vec<Arc<Message>>, MlSrsError> {
         let mut group = self.inner().await;
 
         let mut messages = Vec::with_capacity(signing_identities.len());
@@ -731,7 +731,7 @@ impl Group {
     /// The other group members will find the message in
     /// [`ReceivedMessage::ApplicationMessage`] after calling
     /// [`Group::process_incoming_message`].
-    pub async fn encrypt_application_message(&self, message: &[u8]) -> Result<Message, Error> {
+    pub async fn encrypt_application_message(&self, message: &[u8]) -> Result<Message, MlSrsError> {
         let mut group = self.inner().await;
         let mls_message = group
             .encrypt_application_message(message, Vec::new())
@@ -743,7 +743,7 @@ impl Group {
     pub async fn process_incoming_message(
         &self,
         message: Arc<Message>,
-    ) -> Result<ReceivedMessage, Error> {
+    ) -> Result<ReceivedMessage, MlSrsError> {
         let message = arc_unwrap_or_clone(message);
         let mut group = self.inner().await;
         match group.process_incoming_message(message.inner).await? {
