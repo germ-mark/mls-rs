@@ -191,6 +191,28 @@ impl From<mls_rs::MlsMessage> for Message {
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
+pub struct WrappedMembers {
+    inner: Vec<mls_rs::group::Member>
+}
+
+impl From<Vec<mls_rs::group::Member>> for WrappedMembers {
+    fn from(inner: Vec<mls_rs::group::Member>) -> Self {
+        Self { inner }
+    }
+}
+
+#[uniffi::export]
+impl WrappedMembers {
+    pub fn signing_identities(&self) -> Vec<Arc<SigningIdentity>> {
+        self.inner
+            .iter()
+            .map(|member| Arc::new(member.signing_identity.clone().into()) )
+            .collect()
+            // .map(|signing_identity| Arc::new(signing_identity;
+    }
+}
+
+#[derive(Clone, Debug, uniffi::Object)]
 pub struct Proposal {
     _inner: mls_rs::group::proposal::Proposal,
 }
@@ -779,6 +801,11 @@ impl Group {
             group::ReceivedMessage::Welcome => Ok(ReceivedMessage::Welcome),
             group::ReceivedMessage::KeyPackage(_) => Ok(ReceivedMessage::KeyPackage),
         }
+    }
+
+    pub async fn members(&self) -> WrappedMembers {
+        let group = self.inner().await;
+        return group.roster().members().into();
     }
 }
 

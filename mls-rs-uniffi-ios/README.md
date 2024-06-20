@@ -39,6 +39,6 @@ Then package the xcframework:
  xcodebuild -create-xcframework \
  	-library ../target/aarch64-apple-ios-sim/release/libmls_rs_uniffi_ios.a -headers ./bindings \
  	-library ../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a -headers ./bindings \
- 	-output "ios/Mobile.xcframework" 
+ 	-output "ios/MLSrs.xcframework" 
 
 ```
