@@ -804,8 +804,8 @@ impl Group {
     }
 
     pub async fn members(&self) -> WrappedMembers {
-        let group = self.inner().await;
-        return group.roster().members().into();
+        // let group = self.inner().await;
+        self.inner().await.roster().members().into()
     }
 }
 
