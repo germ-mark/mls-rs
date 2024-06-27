@@ -1,15 +1,30 @@
 #!/usr/bin/env swift
 import Foundation
 
-let homeDirectoryURL = FileManager().homeDirectoryForCurrentUser
 
-let cargoBuild = try Process.run(
-    homeDirectoryURL.appending(path: ".cargo/bin/cargo"),
+
+struct ScriptTask {
+    let path: URL
+    let arguments: [String]
+    
+    func runExpectSuccess() throws {
+        let process = try Process.run(
+            path,
+            arguments: arguments
+            
+        )
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            print("\(path) failed with exit code \(process.terminationStatus)")
+            exit(-1)
+        }
+    }
+}
+
+try ScriptTask(
+    path: FileManager().homeDirectoryForCurrentUser.appending(
+        path: ".cargo/bin/cargo"
+    ),
     arguments: ["build"]
 )
-cargoBuild.waitUntilExit()
-
-guard cargoBuild.terminationStatus == 0 else {
-    print("cargo build failed with exit code \(cargoBuild.terminationStatus)")
-    exit(-1)
-}
+.runExpectSuccess()
