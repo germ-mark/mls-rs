@@ -97,3 +97,11 @@ try ScriptTask(
     ]
 )
 .run()
+
+try ScriptTask(
+    path: URL(fileURLWithPath: "/usr/bin/swift"),
+    arguments: [
+        "package", "compute-checksum", "ios/MLSrs.xcframework.zip"
+    ]
+)
+.run()
