@@ -1,7 +1,11 @@
 # iOS XCFramework
 Build toolchain to generate a XCFramework for mls-rs for an iOS app, using uniffi to generate bindings
 
-# Steps:
+# Scripted
+1. Ensure you add the ios targets to Rust
+2. the script at `scripts/buildIos.swift` automates the following steps
+
+# Manual Steps:
 (preamble - run once)
 Add ios targets to Rust:
 ```

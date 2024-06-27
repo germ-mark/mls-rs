@@ -76,6 +76,23 @@ try ScriptTask(
 
 try ScriptTask(
     path: cargoPath,
-    arguments: ["build", "--release", "target=aarch64-apple-ios"]
+    arguments: ["build", "--release", "--target=aarch64-apple-ios"]
+)
+.runExpectSuccess()
+
+try ScriptTask(
+    path: URL(fileURLWithPath: "/bin/mv"),
+    arguments: ["bindings/mls_rs_uniffi_iosFFI.modulemap", "bindings/module.modulemap"]
+)
+.runExpectSuccess()
+
+try ScriptTask(
+    path: URL(fileURLWithPath: "/usr/bin/xcodebuild"),
+    arguments: [
+        "-create-xcframework",
+        "-library", "../target/aarch64-apple-ios-sim/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        "-library", "../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        "-output", "ios/MLSrs.xcframework"
+    ]
 )
 .runExpectSuccess()
