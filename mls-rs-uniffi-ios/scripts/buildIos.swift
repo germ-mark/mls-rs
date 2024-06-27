@@ -67,3 +67,15 @@ try ScriptTask(
     ]
 )
 .runExpectSuccess()
+
+try ScriptTask(
+    path: cargoPath,
+    arguments: ["build", "--release", "--target=aarch64-apple-ios-sim"]
+)
+.runExpectSuccess()
+
+try ScriptTask(
+    path: cargoPath,
+    arguments: ["build", "--release", "target=aarch64-apple-ios"]
+)
+.runExpectSuccess()
