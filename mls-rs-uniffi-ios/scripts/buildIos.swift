@@ -5,20 +5,7 @@ struct ScriptTask {
     let path: URL
     let arguments: [String]
     
-    func runExpectSuccess() throws {
-        let process = try Process.run(
-            path,
-            arguments: arguments
-            
-        )
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            print("\(path) failed with exit code \(process.terminationStatus)")
-            exit(-1)
-        }
-    }
-    
-    func runAllowingExitCodes(_ codes: [Int32]) throws {
+    func run(allowingExitCodes codes: [Int32] = [0]) throws {
         let process = try Process.run(
             path,
             arguments: arguments
@@ -39,22 +26,28 @@ let cargoPath = FileManager().homeDirectoryForCurrentUser.appending(
 
 try ScriptTask(
     path: URL(fileURLWithPath: "/bin/rm"),
-    arguments: ["./ios/MLSrs.xcframework"]
+    arguments: ["-rv", "./ios/MLSrs.xcframework"]
 )
-.runAllowingExitCodes([1])
+.run(allowingExitCodes: [1])
+
+try ScriptTask(
+    path: URL(fileURLWithPath: "/bin/rm"),
+    arguments: ["-rv", "./ios/MLSrs.xcframework.zip"]
+)
+.run(allowingExitCodes: [1])
 
 
 try ScriptTask(
     path: cargoPath,
     arguments: ["clean"]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: cargoPath,
     arguments: ["build"]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: cargoPath,
@@ -66,25 +59,25 @@ try ScriptTask(
         "--out-dir", "./bindings"
     ]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: cargoPath,
     arguments: ["build", "--release", "--target=aarch64-apple-ios-sim"]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: cargoPath,
     arguments: ["build", "--release", "--target=aarch64-apple-ios"]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: URL(fileURLWithPath: "/bin/mv"),
     arguments: ["bindings/mls_rs_uniffi_iosFFI.modulemap", "bindings/module.modulemap"]
 )
-.runExpectSuccess()
+.run()
 
 try ScriptTask(
     path: URL(fileURLWithPath: "/usr/bin/xcodebuild"),
@@ -95,4 +88,12 @@ try ScriptTask(
         "-output", "ios/MLSrs.xcframework"
     ]
 )
-.runExpectSuccess()
+.run()
+
+try ScriptTask(
+    path: URL(fileURLWithPath: "/usr/bin/zip"),
+    arguments: [
+        "-r", "ios/MLSrs.xcframework.zip", "ios/MLSrs.xcframework"
+    ]
+)
+.run()
