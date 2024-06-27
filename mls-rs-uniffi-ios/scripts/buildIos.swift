@@ -55,3 +55,15 @@ try ScriptTask(
     arguments: ["build"]
 )
 .runExpectSuccess()
+
+try ScriptTask(
+    path: cargoPath,
+    arguments: [
+        "run", "-p", "uniffi-bindgen",
+        "--bin", "uniffi-bindgen",
+        "generate", "--library", "../target/debug/libmls_rs_uniffi_ios.dylib",
+        "--language", "swift",
+        "--out-dir", "./bindings"
+    ]
+)
+.runExpectSuccess()
