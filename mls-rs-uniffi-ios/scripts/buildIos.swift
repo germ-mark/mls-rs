@@ -74,6 +74,12 @@ try ScriptTask(
 .run()
 
 try ScriptTask(
+    path: cargoPath,
+    arguments: ["build", "--release", "--target=aarch64-apple-ios"]
+)
+.run()
+
+try ScriptTask(
     path: URL(fileURLWithPath: "/bin/mv"),
     arguments: ["bindings/mls_rs_uniffi_iosFFI.modulemap", "bindings/module.modulemap"]
 )
