@@ -97,10 +97,15 @@ try ScriptTask(
 )
 .run()
 
+guard FileManager.default.changeCurrentDirectoryPath("./ios") else {
+    print("Couldn't change directory")
+    exit(-1)
+}
+
 try ScriptTask(
     path: URL(fileURLWithPath: "/usr/bin/zip"),
     arguments: [
-        "-r", "ios/MLSrs.xcframework.zip", "ios/MLSrs.xcframework"
+        "-r", "MLSrs.xcframework.zip", "MLSrs.xcframework"
     ]
 )
 .run()
@@ -108,7 +113,7 @@ try ScriptTask(
 try ScriptTask(
     path: URL(fileURLWithPath: "/usr/bin/swift"),
     arguments: [
-        "package", "compute-checksum", "ios/MLSrs.xcframework.zip"
+        "package", "compute-checksum", "MLSrs.xcframework.zip"
     ]
 )
 .run()
