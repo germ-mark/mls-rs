@@ -75,7 +75,7 @@ try ScriptTask(
 
 try ScriptTask(
     path: cargoPath,
-    arguments: ["build", "--release", "--target=aarch64-apple-ios"]
+    arguments: ["build", "--release", "--target=x86_64-apple-darwin"]
 )
 .run()
 
