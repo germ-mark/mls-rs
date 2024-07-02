@@ -110,9 +110,9 @@ try ScriptTask(
     arguments: [
         "-create-xcframework",
         //the ios framework
-        "-library", "../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        "-library", "./ios/libmls_rs_uniffi_ios_sim_combined.a", "-headers", "./bindings",
         //the simulator framework combining arm and x86_64 targets
-        "-library", "../target/x86_64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        "-library", "../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
         "-output", "ios/MLSrs.xcframework"
     ]
 )
