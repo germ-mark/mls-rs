@@ -91,6 +91,7 @@ try ScriptTask(
         "-create-xcframework",
         "-library", "../target/aarch64-apple-ios-sim/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
         "-library", "../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        "-library", "../target/x86_64-apple-darwin/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
         "-output", "ios/MLSrs.xcframework"
     ]
 )
