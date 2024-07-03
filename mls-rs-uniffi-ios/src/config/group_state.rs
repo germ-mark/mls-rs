@@ -7,6 +7,59 @@ use tokio::sync::Mutex;
 
 use crate::MlSrsError;
 
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct KeyPackageData {
+    pub key_package_bytes: Vec<u8>,
+    pub init_key_data: Vec<u8>,
+    pub leaf_node_key_data: Vec<u8>,
+    pub expiration: u64,
+}
+
+impl From<mls_rs_core::key_package::KeyPackageData> for KeyPackageData {
+    fn from(mls_rs_core::key_package::KeyPackageData { 
+        key_package_bytes,
+        init_key,
+        leaf_node_key,
+        expiration, .. }: mls_rs_core::key_package::KeyPackageData ) -> Self {
+        Self { 
+            key_package_bytes: key_package_bytes,
+            init_key_data: init_key.as_ref().to_vec(),
+            leaf_node_key_data: leaf_node_key.as_ref().to_vec(),
+            expiration: expiration,
+        }
+    }
+}
+
+// impl From<KeyPackageData> for mls_rs::key_package::KeyPackageData
+
+#[cfg_attr(mls_build_async, uniffi::export(with_foreign))]
+#[cfg_attr(mls_build_async, maybe_async::must_be_async)]
+#[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+#[cfg_attr(not(mls_build_async), uniffi::export(with_foreign))]
+pub trait KeyPackageStorage: Send + Sync {
+    /// Delete [`KeyPackageData`] referenced by `id`.
+    ///
+    /// This function is called automatically when the key package referenced
+    /// by `id` is used to successfully join a group.
+    ///
+    /// # Warning
+    ///
+    /// [`KeyPackageData`] internally contains secret key values. The
+    /// provided delete mechanism should securely erase data.
+    async fn delete(&self, id: Vec<u8>) -> Result<(), MlSrsError>;
+
+    /// Store [`KeyPackageData`] that can be accessed by `id` in the future.
+    ///
+    /// This function is automatically called whenever a new key package is created.
+    async fn insert(&self, id: Vec<u8>, pkg: KeyPackageData) -> Result<(), MlSrsError>;
+
+    /// Retrieve [`KeyPackageData`] by its `id`.
+    ///
+    /// `None` should be returned in the event that no key packages are found
+    /// that match `id`.
+    async fn get(&self, id: Vec<u8>) -> Result<Option<KeyPackageData>, MlSrsError>;
+}
+
 // TODO(mulmarta): we'd like to use EpochRecord from mls-rs-core but
 // this breaks the Python tests because using two crates makes UniFFI
 // generate a Python module which must be in a subdirectory of the
