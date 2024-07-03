@@ -36,6 +36,12 @@ try ScriptTask(
 )
 .run(allowingExitCodes: [1])
 
+try ScriptTask(
+    path: URL(fileURLWithPath: "/bin/rm"),
+    arguments: ["-rv", "./ios/libmls_rs_uniffi_ios_sim_combined.a"]
+)
+.run(allowingExitCodes: [1])
+
 
 try ScriptTask(
     path: cargoPath,
@@ -75,7 +81,7 @@ try ScriptTask(
 
 try ScriptTask(
     path: cargoPath,
-    arguments: ["build", "--release", "--target=x86_64-apple-darwin"]
+    arguments: ["build", "--release", "--target=x86_64-apple-ios"]
 )
 .run()
 
@@ -85,13 +91,28 @@ try ScriptTask(
 )
 .run()
 
+//We do want to use lipo to build a combined binary for arm and x86 simulator
+//as XCode Cloud runs on x86
+//https://forums.developer.apple.com/forums/thread/711294?answerId=722588022#722588022
+try ScriptTask(
+    path: URL(fileURLWithPath: "/usr/bin/lipo"),
+    arguments: [
+        "-create",
+        "-output", "ios/libmls_rs_uniffi_ios_sim_combined.a",
+        "../target/aarch64-apple-ios-sim/release/libmls_rs_uniffi_ios.a",
+        "../target/x86_64-apple-ios/release/libmls_rs_uniffi_ios.a",
+    ]
+)
+.run()
+
 try ScriptTask(
     path: URL(fileURLWithPath: "/usr/bin/xcodebuild"),
     arguments: [
         "-create-xcframework",
-        "-library", "../target/aarch64-apple-ios-sim/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
+        //the ios framework
+        "-library", "./ios/libmls_rs_uniffi_ios_sim_combined.a", "-headers", "./bindings",
+        //the simulator framework combining arm and x86_64 targets
         "-library", "../target/aarch64-apple-ios/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
-        "-library", "../target/x86_64-apple-darwin/release/libmls_rs_uniffi_ios.a", "-headers", "./bindings",
         "-output", "ios/MLSrs.xcframework"
     ]
 )
