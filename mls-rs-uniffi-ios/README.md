@@ -9,7 +9,7 @@ Build toolchain to generate a XCFramework for mls-rs for an iOS app, using uniff
 (preamble - run once)
 Add ios targets to Rust:
 ```
-rustup target add aarch64-apple-ios-sim aarch64-apple-ios x86_64-apple-darwin
+rustup target add aarch64-apple-ios-sim aarch64-apple-ios x86_64-apple-ios
 ```
 
 (following steps are run from this crate's directory, within the mls-rs workspace)

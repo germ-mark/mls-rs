@@ -415,6 +415,7 @@ impl Client {
             .crypto_provider(crypto_provider)
             .identity_provider(basic::BasicIdentityProvider::new())
             .signing_identity(signing_identity, secret_key.into(), cipher_suite.into())
+            .key_package_repo(client_config.client_keypackage_storage.into())
             .group_state_storage(client_config.group_state_storage.into())
             .mls_rules(mls_rules)
             .build();

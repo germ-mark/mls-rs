@@ -30,13 +30,26 @@ impl From<mls_rs_core::key_package::KeyPackageData> for KeyPackageData {
     }
 }
 
-// impl From<KeyPackageData> for mls_rs::key_package::KeyPackageData
+impl From<KeyPackageData> for mls_rs_core::key_package::KeyPackageData {
+    fn from(KeyPackageData { 
+        key_package_bytes,
+        init_key_data,
+        leaf_node_key_data,
+        expiration, .. }: KeyPackageData ) -> Self {
+        mls_rs_core::key_package::KeyPackageData::new( 
+            key_package_bytes,
+            mls_rs_core::crypto::HpkeSecretKey::from(init_key_data),
+            mls_rs_core::crypto::HpkeSecretKey::from(leaf_node_key_data),
+            expiration
+        )
+    }
+}
 
 #[cfg_attr(mls_build_async, uniffi::export(with_foreign))]
 #[cfg_attr(mls_build_async, maybe_async::must_be_async)]
 #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
 #[cfg_attr(not(mls_build_async), uniffi::export(with_foreign))]
-pub trait KeyPackageStorage: Send + Sync {
+pub trait KeyPackageStorageFfi: Send + Sync + Debug {
     /// Delete [`KeyPackageData`] referenced by `id`.
     ///
     /// This function is called automatically when the key package referenced
@@ -59,6 +72,66 @@ pub trait KeyPackageStorage: Send + Sync {
     /// that match `id`.
     async fn get(&self, id: Vec<u8>) -> Result<Option<KeyPackageData>, MlSrsError>;
 }
+
+/// Adapt a mls-rs `KeyPackageStorage` implementation.
+///
+/// This is used to adapt a mls-rs `KeyPackageStorage` implementation
+/// to our own `KeyPackageStorage` trait. This way we can use any
+/// standard mls-rs group state storage from the FFI layer.
+#[derive(Debug)]
+pub(crate) struct KeyPackageStorageAdapter<S>(Mutex<S>);
+
+impl<S> KeyPackageStorageAdapter<S> {
+    pub fn new(keypackage_storage: S) -> KeyPackageStorageAdapter<S> {
+        Self(Mutex::new(keypackage_storage))
+    }
+
+    #[cfg(not(mls_build_async))]
+    fn inner(&self) -> std::sync::MutexGuard<'_, S> {
+        self.0.lock().unwrap()
+    }
+
+    #[cfg(mls_build_async)]
+    async fn inner(&self) -> tokio::sync::MutexGuard<'_, S> {
+        self.0.lock().await
+    }
+}
+
+#[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+#[cfg_attr(mls_build_async, maybe_async::must_be_async)]
+impl<S, Err> KeyPackageStorageFfi for KeyPackageStorageAdapter<S>
+where
+    S: mls_rs::KeyPackageStorage<Error = Err> + Debug,
+    Err: IntoAnyError,
+{
+    async fn delete(&self, id: Vec<u8>) -> Result<(), MlSrsError> {
+        self.inner()
+            .await
+            .delete(&id)
+            .await
+            .map_err(|err| err.into_any_error().into() )
+    }
+
+    async fn insert(&self, id: Vec<u8>, pkg: KeyPackageData) -> Result<(), MlSrsError> {
+        self.inner()
+            .await
+            .insert(id, mls_rs::storage_provider::KeyPackageData::from(pkg))
+            .await
+            .map_err(|err| err.into_any_error().into() )
+    }
+
+    async fn get(&self, id: Vec<u8>) -> Result<Option<KeyPackageData>, MlSrsError> {
+        self.inner()
+            .await
+            .get(&id)
+            .map(|option| option.map(|result| result.into()) )
+            .await
+            .map_err(|err| err.into_any_error().into() )
+    }
+}
+
+
+//MARK: Group Storage
 
 // TODO(mulmarta): we'd like to use EpochRecord from mls-rs-core but
 // this breaks the Python tests because using two crates makes UniFFI
