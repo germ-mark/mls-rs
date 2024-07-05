@@ -29,6 +29,10 @@ use mls_rs_core::crypto::SignatureSecretKey;
 #[cfg(feature = "tree_index")]
 use mls_rs_core::identity::IdentityProvider;
 
+use super::{
+    state_repo::PendingUpdate,
+};
+
 #[derive(Debug, PartialEq, Clone, MlsEncode, MlsDecode, MlsSize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Snapshot {
@@ -38,7 +42,7 @@ pub(crate) struct Snapshot {
     epoch_secrets: EpochSecrets,
     key_schedule: KeySchedule,
     #[cfg(feature = "by_ref_proposal")]
-    pending_updates: SmallMap<HpkePublicKey, (HpkeSecretKey, Option<SignatureSecretKey>)>,
+    pending_updates: SmallMap<HpkePublicKey, (HpkeSecretKey, PendingUpdate)>,
     pending_commit: Option<CommitGeneration>,
     signer: SignatureSecretKey,
 }
