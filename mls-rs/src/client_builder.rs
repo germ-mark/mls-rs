@@ -811,8 +811,14 @@ pub(crate) struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
+        #[cfg(not(feature = "replace_proposal"))]
+        let extension_types = Default::default();
+
+        #[cfg(feature = "replace_proposal")]
+        let extension_types = vec![ExtensionType::LEAF_NODE_EPOCH];
+
         Self {
-            extension_types: Default::default(),
+            extension_types: extension_types,
             protocol_versions: Default::default(),
             lifetime_in_s: 365 * 24 * 3600,
             custom_proposal_types: Default::default(),

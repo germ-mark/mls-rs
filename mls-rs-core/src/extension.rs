@@ -37,6 +37,12 @@ impl ExtensionType {
     #[cfg(feature = "last_resort_key_package_ext")]
     pub const LAST_RESORT_KEY_PACKAGE: ExtensionType = ExtensionType(0x000A);
 
+    // XXX(RLB): This value is chosen from the vendor range, since this is an experimental
+    // implementation that is only intended to work between `mls-rs` instances.  Once a real value
+    // is assigned by IANA, this code will need to be updated.
+    #[cfg(feature = "replace_proposal")]
+    pub const LEAF_NODE_EPOCH: ExtensionType = ExtensionType(0xFF01);
+
     /// Default extension types defined
     /// in [RFC 9420](https://www.rfc-editor.org/rfc/rfc9420.html#name-leaf-node-contents)
     pub const DEFAULT: &'static [ExtensionType] = &[
