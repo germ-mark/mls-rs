@@ -863,13 +863,24 @@ impl Group {
         Ok(inner_message.into())
     }
 
-     pub async fn abandon_replacement(
+    pub async fn abandon_replacement(
         &self,
         replace_proposal: Arc<ProposalFfi>
     ) {
         let mut group = self.inner().await;
         let proposal = arc_unwrap_or_clone(replace_proposal).into();
         group.abandon_replacement_variant(&proposal)
+    }
+
+    pub fn replace_member(
+        &self,
+        replace_proposal: Arc<ProposalFfi>
+    ) -> Result<CommitOutput, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let proposal = arc_unwrap_or_clone(replace_proposal).into();
+        
+        group.replace_member(proposal)?.try_into()
     }
 }
 
