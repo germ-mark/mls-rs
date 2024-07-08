@@ -1014,6 +1014,48 @@ where
         }
     }
 
+    //MARK: (MMX)
+
+    //Since LeafNode is not re-exported in mls-rs, we handle them outside the FFI as Proposal objects
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replacement_proposal(
+        &mut self,
+        to_replace: u32,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<SigningIdentity>
+    ) -> Result<Proposal, MlsError> {
+        let leaf_node = self.updated_leaf_node(PendingUpdateContext::Replace, signer, signing_identity)?;
+        return Ok(Proposal::Replace(ReplaceProposal {
+            to_replace: LeafIndex(to_replace),
+            leaf_node,
+        }))
+    }
+
+    // Variant of the above that takes a Proposal object as input
+    /// Create a proposal message that replaces another member.
+    ///
+    /// `authenticated_data` will be sent unencrypted along with the contents
+    /// of the proposal message.
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn propose_replace_variant(
+        &mut self,
+        replace_proposal: Proposal,
+        authenticated_data: Vec<u8>,
+    ) -> Result<MlsMessage, MlsError> {
+        self.proposal_message(replace_proposal, authenticated_data).await
+    }
+
+    /// Abandon any cached state corresponding to a replacement leaf node
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn abandon_replacement_variant(&mut self, proposal: &Proposal) { 
+        if let Proposal::Replace(replace_proposal) = proposal {
+            self.abandon_replacement(&replace_proposal.leaf_node)
+        }
+    }
+
     /// Create a fresh LeafNode that can be used to update this member's leaf.
     #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
