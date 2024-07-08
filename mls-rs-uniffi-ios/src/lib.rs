@@ -229,13 +229,19 @@ impl WrappedMembers {
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-pub struct Proposal {
+pub struct ProposalFfi {
     _inner: mls_rs::group::proposal::Proposal,
 }
 
-impl From<mls_rs::group::proposal::Proposal> for Proposal {
+impl From<mls_rs::group::proposal::Proposal> for ProposalFfi {
     fn from(inner: mls_rs::group::proposal::Proposal) -> Self {
         Self { _inner: inner }
+    }
+}
+
+impl From<ProposalFfi> for mls_rs::group::proposal::Proposal {
+    fn from(outer: ProposalFfi) -> Self {
+        outer._inner.clone()
     }
 }
 
@@ -307,7 +313,7 @@ pub enum ReceivedMessage {
     /// A proposal was received.
     ReceivedProposal {
         sender: Arc<SigningIdentity>,
-        proposal: Arc<Proposal>,
+        proposal: Arc<ProposalFfi>,
     },
 
     /// Validated GroupInfo object.
@@ -828,7 +834,45 @@ impl Group {
     pub async fn group_id(&self) -> Vec<u8> {
         self.inner().await.group_id().to_vec()
     }
+
+    pub async fn replacement_leaf_node(
+        &self,
+        to_replace: u32,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<Arc<SigningIdentity>>
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let mut group = self.inner().await;
+        let inner_proposal = group.replacement_proposal(
+            to_replace,
+            signer.map(|wrapper| wrapper.into()),
+            signing_identity.map(|wrapper| wrapper.inner.clone() )
+        )?;
+        return Ok(Arc::new(inner_proposal.clone().into()))
+    }
+
+    pub async fn propose_replace(
+        &self,
+        replace_proposal: Arc<ProposalFfi>,
+        authenticated_data: Vec<u8>,
+    ) -> Result<Message, MlSrsError> {
+        let mut group = self.inner().await;
+        let inner_message = group.propose_replace_variant(
+            arc_unwrap_or_clone(replace_proposal).into(),
+            authenticated_data
+        )?;
+        Ok(inner_message.into())
+    }
+
+     pub async fn abandon_replacement(
+        &self,
+        replace_proposal: Arc<ProposalFfi>
+    ) {
+        let mut group = self.inner().await;
+        let proposal = arc_unwrap_or_clone(replace_proposal).into();
+        group.abandon_replacement_variant(&proposal)
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
