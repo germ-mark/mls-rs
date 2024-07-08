@@ -1056,6 +1056,23 @@ where
         }
     }
 
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    //since the leaf_node types are private, more sensible to implement the application of the replace here:
+    pub async fn replace_member(
+        &mut self,
+        replace_proposal: Proposal
+    ) -> Result<CommitOutput, MlsError> {
+        match replace_proposal {
+            crate::group::proposal::Proposal::Replace(proposal_inner) => return self
+                .commit_builder()
+                .replace_member(proposal_inner.to_replace.0, proposal_inner.leaf_node)?
+                .build()
+                .await,
+            _ => return Err(MlsError::RequiredProposalNotFound(crate::group::proposal::ProposalType::new(65001)))
+        }
+    }
+
     /// Create a fresh LeafNode that can be used to update this member's leaf.
     #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
