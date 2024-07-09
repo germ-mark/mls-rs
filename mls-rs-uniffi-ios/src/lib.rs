@@ -849,6 +849,22 @@ impl Group {
         self.inner().await.group_id().to_vec()
     }
 
+    pub  async fn update_proposal_from_kp (
+        &self,
+        key_package_id: Vec<u8>,
+        signer: Option<SignatureSecretKey>
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let inner_proposal = self.inner().await
+            .update_proposal_from_kp(
+                key_package_id,
+                signer.map(|key| key.into())
+            )?;
+        Ok(Arc::new(inner_proposal.clone().into()))
+
+    }
+
+    //MARK: deprecate
+
     pub async fn replacement_leaf_node(
         &self,
         to_replace: u32,
