@@ -9,6 +9,7 @@ use mls_rs_codec::{MlsDecode, MlsEncode, MlsSize};
 use mls_rs_core::error::IntoAnyError;
 use mls_rs_core::secret::Secret;
 use mls_rs_core::time::MlsTime;
+use mls_rs_core::key_package::KeyPackageStorage;
 
 use crate::cipher_suite::CipherSuite;
 use crate::client::MlsError;
@@ -1015,7 +1016,6 @@ where
     }
 
     //MARK: (MMX)
-
     //Since LeafNode is not re-exported in mls-rs, we handle them outside the FFI as Proposal objects
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
@@ -1056,6 +1056,53 @@ where
         }
     }
 
+    //MARK: update/ replace
+
+    ///From a keyPackage, generate an update proposal
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn update_proposal_from_kp(
+        &mut self,
+        key_package_id: Vec<u8>,
+        signer: Option<SignatureSecretKey>,
+        // signing_identity: Option<SigningIdentity>,
+    ) -> Result<Proposal, MlsError> {
+        let key_package_data = self.config
+            .key_package_repo()
+            .get(&key_package_id)
+            .await
+            .map_err(|err| MlsError::KeyPackageRepoError(err.into_any_error()))
+            .unwrap();
+        match key_package_data {
+            None => Err(MlsError::WelcomeKeyPackageNotFound),
+            Some(kp_data) => {
+                let key_package_gen = crate::key_package::KeyPackageGeneration::from_storage(key_package_id, kp_data)
+                    .unwrap();
+                let leaf_node = key_package_gen.key_package.leaf_node;
+
+                let pending_update = PendingUpdate {
+                    context: PendingUpdateContext::Replace,
+                    secret_key: key_package_gen.leaf_node_secret_key, // secret_key,
+                    signer: signer
+                };
+
+                 // Store the secret key in the pending updates storage for later
+                #[cfg(feature = "std")]
+                self.pending_updates
+                    .insert(leaf_node.public_key.clone(), pending_update);
+
+                #[cfg(not(feature = "std"))]
+                self.pending_updates
+                    .push((leaf_node.public_key.clone(), pending_update));
+
+                Ok(Proposal::Update(UpdateProposal { leaf_node } ))
+            } 
+        }
+        
+    }
+
+    //MARK: end (MMX)
+
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
     //since the leaf_node types are private, more sensible to implement the application of the replace here:
@@ -1069,7 +1116,7 @@ where
                 .replace_member(proposal_inner.to_replace.0, proposal_inner.leaf_node)?
                 .build()
                 .await,
-            _ => return Err(MlsError::RequiredProposalNotFound(crate::group::proposal::ProposalType::new(65001)))
+            _ => return Err(MlsError::RequiredProposalNotFound(crate::group::proposal::ProposalType::new(8)))
         }
     }
 
