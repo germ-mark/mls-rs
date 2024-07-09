@@ -206,7 +206,7 @@ impl From<mls_rs::MlsMessage> for Message {
     }
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct MLSMember {
     pub index: u32,
     /// Current identity public key and credential of this member.
@@ -843,9 +843,6 @@ impl Group {
             .iter()
             .map(|member| member.clone().into() )
             .collect()
-
-             //.iter()
-            // .map(|member| member.into()).collect()
     }
 
     pub async fn group_id(&self) -> Vec<u8> {
