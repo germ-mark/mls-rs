@@ -198,6 +198,10 @@ impl Message {
             .map_err(|err| err.into_any_error())?;
         Ok(result)
      }
+
+     pub fn group_id(&self) -> Option<Vec<u8>> {
+        self.inner.group_id().map(|id| id.to_vec())
+     }
 }
 
 impl From<mls_rs::MlsMessage> for Message {
@@ -221,16 +225,6 @@ impl From<mls_rs::group::Member> for MLSMember {
         }
     }
 }
-
-// #[uniffi::export]
-// impl MLSMember {
-//     pub fn signing_identiti(&self) -> Vec<Arc<SigningIdentity>> {
-//         self.inner
-//             .iter()
-//             .map(|member| Arc::new(member.signing_identity.clone().into()) )
-//             .collect()
-//     }
-// }
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct ProposalFfi {
@@ -780,10 +774,14 @@ impl Group {
     /// The other group members will find the message in
     /// [`ReceivedMessage::ApplicationMessage`] after calling
     /// [`Group::process_incoming_message`].
-    pub async fn encrypt_application_message(&self, message: &[u8]) -> Result<Message, MlSrsError> {
+    pub async fn encrypt_application_message(
+        &self,
+         message: &[u8],
+         authenticated_data: Vec<u8>
+        ) -> Result<Message, MlSrsError> {
         let mut group = self.inner().await;
         let mls_message = group
-            .encrypt_application_message(message, Vec::new())
+            .encrypt_application_message(message, authenticated_data)
             .await?;
         Ok(mls_message.into())
     }
