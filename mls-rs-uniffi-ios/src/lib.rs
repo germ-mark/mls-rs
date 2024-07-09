@@ -198,6 +198,10 @@ impl Message {
             .map_err(|err| err.into_any_error())?;
         Ok(result)
      }
+
+     pub fn group_id(&self) -> Option<Vec<u8>> {
+        self.inner.group_id().map(|id| id.to_vec())
+     }
 }
 
 impl From<mls_rs::MlsMessage> for Message {
@@ -221,16 +225,6 @@ impl From<mls_rs::group::Member> for MLSMember {
         }
     }
 }
-
-// #[uniffi::export]
-// impl MLSMember {
-//     pub fn signing_identiti(&self) -> Vec<Arc<SigningIdentity>> {
-//         self.inner
-//             .iter()
-//             .map(|member| Arc::new(member.signing_identity.clone().into()) )
-//             .collect()
-//     }
-// }
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct ProposalFfi {
