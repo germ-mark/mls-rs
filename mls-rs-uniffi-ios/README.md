@@ -5,19 +5,10 @@ Build toolchain to generate a XCFramework for mls-rs for an iOS app, using uniff
 1. Ensure you add the ios targets to Rust
 2. the script at `scripts/buildIos.swift` automates the following steps
 
-# Manual fixes
-1. Currently uniffi header has a bug that inserts a misplaced throw keyword in the definition of `Message.init(bytes: )`
-(The throws keyword belongs in the function signature, not the try call to rustCallWithError)
-```
-public convenience init(bytes: Data) {
-    let pointer = throws try rustCallWithError(FfiConverterTypeMlSrsError.lift) {
-    uniffi_mls_rs_uniffi_ios_fn_constructor_message_new(
-        FfiConverterData.lower(bytes),$0
-    )
-}
-```
-2. Uniffi also complains that it is unable to find swift format, but we can just run `swift format` on the output to lint it
-3. (Synthesized) Conformance to `Codable, Sendable` should be declared in the file where `KeyPackageData` is declared, so we should edit the generated header file to add the conformances. To help remind us, there is a test that will fail if KeyPackageData is not marked Codable
+# Post-script adjustments
+1. Uniffi also complains that it is unable to find swift format, but we can just run `swift format` on the output to lint it
+2. (Synthesized) Conformance to `Codable, Sendable` should be declared in the file where `KeyPackageData` is declared, so we should edit the generated header file to add the conformances. To help remind us, there is a test that will fail if KeyPackageData is not marked Codable
+3. We also need MLSMember conformance to Equatable 
 
 
 # Manual Steps:
