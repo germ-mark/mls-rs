@@ -774,10 +774,14 @@ impl Group {
     /// The other group members will find the message in
     /// [`ReceivedMessage::ApplicationMessage`] after calling
     /// [`Group::process_incoming_message`].
-    pub async fn encrypt_application_message(&self, message: &[u8]) -> Result<Message, MlSrsError> {
+    pub async fn encrypt_application_message(
+        &self,
+         message: &[u8],
+         authenticated_data: Vec<u8>
+        ) -> Result<Message, MlSrsError> {
         let mut group = self.inner().await;
         let mls_message = group
-            .encrypt_application_message(message, Vec::new())
+            .encrypt_application_message(message, authenticated_data)
             .await?;
         Ok(mls_message.into())
     }
