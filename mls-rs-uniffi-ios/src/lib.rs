@@ -206,27 +206,31 @@ impl From<mls_rs::MlsMessage> for Message {
     }
 }
 
-#[derive(Clone, Debug, uniffi::Object)]
-pub struct WrappedMembers {
-    inner: Vec<mls_rs::group::Member>
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct MLSMember {
+    pub index: u32,
+    /// Current identity public key and credential of this member.
+    pub signing_identity: Arc<SigningIdentity>
 }
 
-impl From<Vec<mls_rs::group::Member>> for WrappedMembers {
-    fn from(inner: Vec<mls_rs::group::Member>) -> Self {
-        Self { inner }
+impl From<mls_rs::group::Member> for MLSMember {
+    fn from(inner: mls_rs::group::Member) -> Self {
+        Self { 
+            index: inner.index,
+            signing_identity: Arc::new(inner.signing_identity.clone().into())
+        }
     }
 }
 
-#[uniffi::export]
-impl WrappedMembers {
-    pub fn signing_identities(&self) -> Vec<Arc<SigningIdentity>> {
-        self.inner
-            .iter()
-            .map(|member| Arc::new(member.signing_identity.clone().into()) )
-            .collect()
-            // .map(|signing_identity| Arc::new(signing_identity;
-    }
-}
+// #[uniffi::export]
+// impl MLSMember {
+//     pub fn signing_identiti(&self) -> Vec<Arc<SigningIdentity>> {
+//         self.inner
+//             .iter()
+//             .map(|member| Arc::new(member.signing_identity.clone().into()) )
+//             .collect()
+//     }
+// }
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct ProposalFfi {
@@ -826,9 +830,22 @@ impl Group {
         }
     }
 
-    pub async fn members(&self) -> WrappedMembers {
+    /// # Warning
+    ///
+    /// The indexes within this roster do not correlate with indexes of users
+    /// within [`ReceivedMessage`] content descriptions due to the layout of
+    /// member information within a MLS group state.
+    pub async fn members(&self) -> Vec<MLSMember> {
         // let group = self.inner().await;
-        self.inner().await.roster().members().into()
+        self.inner().await
+            .roster()
+            .members()
+            .iter()
+            .map(|member| member.clone().into() )
+            .collect()
+
+             //.iter()
+            // .map(|member| member.into()).collect()
     }
 
     pub async fn group_id(&self) -> Vec<u8> {
