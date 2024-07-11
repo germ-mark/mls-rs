@@ -39,6 +39,7 @@ use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 //use mls_rs_crypto_openssl::OpensslCryptoProvider;
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
 use mls_rs::mls_rs_codec::MlsDecode;
+use mls_rs::mls_rs_codec::MlsEncode;
 
 uniffi::setup_scaffolding!();
 
@@ -917,6 +918,13 @@ impl Group {
             authenticated_data
         );
         Ok(result?.into())
+    }
+
+    pub fn extract_update(&self, received_proposal: Arc<ProposalFfi>) -> Option<Vec<u8>> {
+        match &received_proposal._inner {
+            mls_rs::group::proposal::Proposal::Update(update_proposal) => update_proposal.mls_encode_to_vec().ok(),
+            _ => None
+        }
     }
 
     //MARK: deprecate
