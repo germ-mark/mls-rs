@@ -38,6 +38,7 @@ use mls_rs_core::identity;
 use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 //use mls_rs_crypto_openssl::OpensslCryptoProvider;
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
+use mls_rs::mls_rs_codec::MlsDecode;
 
 uniffi::setup_scaffolding!();
 
@@ -840,6 +841,8 @@ impl Group {
         }
     }
 
+    //MARK: Germ helpers
+
     /// # Warning
     ///
     /// The indexes within this roster do not correlate with indexes of users
@@ -859,7 +862,36 @@ impl Group {
         self.inner().await.group_id().to_vec()
     }
 
-    pub  async fn update_proposal_from_kp (
+    //MARK: Germ API
+    pub async fn commit_selected_proposals(
+        &self,
+        proposals_archives: Vec<ReceivedUpdate>
+    ) -> Result<CommitOutput, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let updates: Result<Vec<mls_rs::group::proposal::Proposal>, MlsError> = proposals_archives
+            .iter().map( |received_update| {
+                let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
+                    &mut received_update.encoded_update.as_slice()
+                );
+                if received_update.epoch == group.current_epoch() {
+                    Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
+                } else {
+                    return group.replace_proposal_variant(
+                        received_update.leaf_index,
+                        update_proposal?
+                    );
+                }
+            })
+            .collect();
+        group.commit_builder()
+            .raw_proposals(updates?)
+            .build().await?
+            .try_into()
+    }
+
+    //MARK: deprecate
+    pub async fn update_proposal_from_kp (
         &self,
         key_package_id: Vec<u8>,
         signer: Option<SignatureSecretKey>
@@ -872,8 +904,6 @@ impl Group {
         Ok(Arc::new(inner_proposal.clone().into()))
 
     }
-
-    //MARK: deprecate
 
     pub async fn replacement_leaf_node(
         &self,
@@ -922,6 +952,14 @@ impl Group {
         
         group.replace_member(proposal)?.try_into()
     }
+}
+
+//MARK: Germ types
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ReceivedUpdate {
+    pub epoch: u64, //which epoch was this received for? determines if we convert to a replace
+    pub leaf_index: u32, //filling this outside, but should be able to determine this inside when processing an update
+    pub encoded_update: Vec<u8> //mls_encoded UpdateProposal object containing a leaf_node
 }
 
 
