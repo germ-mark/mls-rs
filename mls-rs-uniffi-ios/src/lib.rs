@@ -298,12 +298,14 @@ pub enum ReceivedMessage {
     ApplicationMessage {
         sender: Arc<SigningIdentity>,
         data: Vec<u8>,
+        authenticated_data: Vec<u8>
     },
 
     /// A new commit was processed creating a new group state.
     Commit {
         committer: Arc<SigningIdentity>,
         roster_update: RosterUpdate,
+        authenticated_data: Vec<u8>
     },
 
     // TODO(mgeisler): rename to `Proposal` when
@@ -312,6 +314,7 @@ pub enum ReceivedMessage {
     ReceivedProposal {
         sender: Arc<SigningIdentity>,
         proposal: Arc<Proposal>,
+        authenticated_data: Vec<u8>
     },
 
     /// Validated GroupInfo object.
@@ -810,15 +813,18 @@ impl Group {
                 let sender =
                     Arc::new(index_to_identity(&group, application_message.sender_index)?.into());
                 let data = application_message.data().to_vec();
-                Ok(ReceivedMessage::ApplicationMessage { sender, data })
+                let authenticated_data = application_message.authenticated_data.to_vec();
+                Ok(ReceivedMessage::ApplicationMessage { sender, data, authenticated_data })
             }
             group::ReceivedMessage::Commit(commit_message) => {
                 let committer =
                     Arc::new(index_to_identity(&group, commit_message.committer)?.into());
                 let roster_update = RosterUpdate::new(commit_message.state_update.roster_update());
+                let authenticated_data = commit_message.authenticated_data.to_vec();
                 Ok(ReceivedMessage::Commit {
                     committer,
                     roster_update,
+                    authenticated_data
                 })
             }
             group::ReceivedMessage::Proposal(proposal_message) => {
@@ -829,7 +835,8 @@ impl Group {
                     _ => todo!("External and NewMember proposal senders are not supported"),
                 };
                 let proposal = Arc::new(proposal_message.proposal.into());
-                Ok(ReceivedMessage::ReceivedProposal { sender, proposal })
+                let authenticated_data = proposal_message.authenticated_data.to_vec();
+                Ok(ReceivedMessage::ReceivedProposal { sender, proposal, authenticated_data })
             }
             // TODO: group::ReceivedMessage::GroupInfo does not have any
             // public methods (unless the "ffi" Cargo feature is set).
