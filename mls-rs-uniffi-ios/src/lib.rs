@@ -897,6 +897,28 @@ impl Group {
             .try_into()
     }
 
+    pub async fn propose_update_with_identity(
+        &self,
+        signer: SignatureSecretKey,
+        signature_key_data: Vec<u8>,
+        basic_credential: Vec<u8>,
+        authenticated_data: Vec<u8>,
+    )-> Result<Message, MlSrsError> {
+        let signing_identity = identity::SigningIdentity::new(
+            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
+            signature_key_data.into(),
+        );
+
+        let mut group = self.inner().await;
+
+        let result = group.propose_update_with_identity(
+            signer.into(),
+            signing_identity,
+            authenticated_data
+        );
+        Ok(result?.into())
+    }
+
     //MARK: deprecate
     pub async fn update_proposal_from_kp (
         &self,
