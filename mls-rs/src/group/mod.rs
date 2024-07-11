@@ -1032,6 +1032,19 @@ where
         }))
     }
 
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replace_proposal_variant(
+        &mut self,
+        to_replace: u32,
+        update_proposal: UpdateProposal,
+    ) -> Result<Proposal, MlsError> {
+        Ok(Proposal::Replace(ReplaceProposal {
+            to_replace: LeafIndex(to_replace),
+            leaf_node: update_proposal.leaf_node,
+        }))
+    }
+
     // Variant of the above that takes a Proposal object as input
     /// Create a proposal message that replaces another member.
     ///
@@ -1101,7 +1114,6 @@ where
         
     }
 
-    //MARK: end (MMX)
 
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
@@ -1119,6 +1131,8 @@ where
             _ => return Err(MlsError::RequiredProposalNotFound(crate::group::proposal::ProposalType::new(8)))
         }
     }
+
+    //MARK: end (MMX)
 
     /// Create a fresh LeafNode that can be used to update this member's leaf.
     #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
