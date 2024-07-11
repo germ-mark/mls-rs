@@ -589,6 +589,18 @@ impl From<identity::SigningIdentity> for SigningIdentity {
     }
 }
 
+#[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+#[cfg_attr(mls_build_async, maybe_async::must_be_async)]
+#[uniffi::export]
+impl SigningIdentity {
+    pub fn basic_credential(&self) -> Option<Vec<u8>> {
+        match self.clone().inner.credential {
+            mls_rs::identity::Credential::Basic(basic_credential) => Some(basic_credential.identifier),
+            _ => None
+        }
+    }
+}
+
 /// An MLS end-to-end encrypted group.
 ///
 /// The group is used to send and process incoming messages and to
