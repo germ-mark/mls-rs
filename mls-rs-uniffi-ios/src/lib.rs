@@ -38,6 +38,7 @@ use mls_rs_core::identity;
 use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 //use mls_rs_crypto_openssl::OpensslCryptoProvider;
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
+use mls_rs::mls_rs_codec::MlsDecode;
 
 uniffi::setup_scaffolding!();
 
@@ -198,6 +199,10 @@ impl Message {
             .map_err(|err| err.into_any_error())?;
         Ok(result)
      }
+
+     pub fn group_id(&self) -> Option<Vec<u8>> {
+        self.inner.group_id().map(|id| id.to_vec())
+     }
 }
 
 impl From<mls_rs::MlsMessage> for Message {
@@ -206,36 +211,36 @@ impl From<mls_rs::MlsMessage> for Message {
     }
 }
 
-#[derive(Clone, Debug, uniffi::Object)]
-pub struct WrappedMembers {
-    inner: Vec<mls_rs::group::Member>
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct MLSMember {
+    pub index: u32,
+    /// Current identity public key and credential of this member.
+    pub signing_identity: Arc<SigningIdentity>
 }
 
-impl From<Vec<mls_rs::group::Member>> for WrappedMembers {
-    fn from(inner: Vec<mls_rs::group::Member>) -> Self {
-        Self { inner }
-    }
-}
-
-#[uniffi::export]
-impl WrappedMembers {
-    pub fn signing_identities(&self) -> Vec<Arc<SigningIdentity>> {
-        self.inner
-            .iter()
-            .map(|member| Arc::new(member.signing_identity.clone().into()) )
-            .collect()
-            // .map(|signing_identity| Arc::new(signing_identity;
+impl From<mls_rs::group::Member> for MLSMember {
+    fn from(inner: mls_rs::group::Member) -> Self {
+        Self { 
+            index: inner.index,
+            signing_identity: Arc::new(inner.signing_identity.clone().into())
+        }
     }
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-pub struct Proposal {
+pub struct ProposalFfi {
     _inner: mls_rs::group::proposal::Proposal,
 }
 
-impl From<mls_rs::group::proposal::Proposal> for Proposal {
+impl From<mls_rs::group::proposal::Proposal> for ProposalFfi {
     fn from(inner: mls_rs::group::proposal::Proposal) -> Self {
         Self { _inner: inner }
+    }
+}
+
+impl From<ProposalFfi> for mls_rs::group::proposal::Proposal {
+    fn from(outer: ProposalFfi) -> Self {
+        outer._inner.clone()
     }
 }
 
@@ -294,12 +299,14 @@ pub enum ReceivedMessage {
     ApplicationMessage {
         sender: Arc<SigningIdentity>,
         data: Vec<u8>,
+        authenticated_data: Vec<u8>
     },
 
     /// A new commit was processed creating a new group state.
     Commit {
         committer: Arc<SigningIdentity>,
         roster_update: RosterUpdate,
+        authenticated_data: Vec<u8>
     },
 
     // TODO(mgeisler): rename to `Proposal` when
@@ -307,7 +314,8 @@ pub enum ReceivedMessage {
     /// A proposal was received.
     ReceivedProposal {
         sender: Arc<SigningIdentity>,
-        proposal: Arc<Proposal>,
+        proposal: Arc<ProposalFfi>,
+        authenticated_data: Vec<u8>
     },
 
     /// Validated GroupInfo object.
@@ -585,6 +593,18 @@ impl From<identity::SigningIdentity> for SigningIdentity {
     }
 }
 
+#[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+#[cfg_attr(mls_build_async, maybe_async::must_be_async)]
+#[uniffi::export]
+impl SigningIdentity {
+    pub fn basic_credential(&self) -> Option<Vec<u8>> {
+        match self.clone().inner.credential {
+            mls_rs::identity::Credential::Basic(basic_credential) => Some(basic_credential.identifier),
+            _ => None
+        }
+    }
+}
+
 /// An MLS end-to-end encrypted group.
 ///
 /// The group is used to send and process incoming messages and to
@@ -770,10 +790,14 @@ impl Group {
     /// The other group members will find the message in
     /// [`ReceivedMessage::ApplicationMessage`] after calling
     /// [`Group::process_incoming_message`].
-    pub async fn encrypt_application_message(&self, message: &[u8]) -> Result<Message, MlSrsError> {
+    pub async fn encrypt_application_message(
+        &self,
+         message: &[u8],
+         authenticated_data: Vec<u8>
+        ) -> Result<Message, MlSrsError> {
         let mut group = self.inner().await;
         let mls_message = group
-            .encrypt_application_message(message, Vec::new())
+            .encrypt_application_message(message, authenticated_data)
             .await?;
         Ok(mls_message.into())
     }
@@ -790,15 +814,18 @@ impl Group {
                 let sender =
                     Arc::new(index_to_identity(&group, application_message.sender_index)?.into());
                 let data = application_message.data().to_vec();
-                Ok(ReceivedMessage::ApplicationMessage { sender, data })
+                let authenticated_data = application_message.authenticated_data.to_vec();
+                Ok(ReceivedMessage::ApplicationMessage { sender, data, authenticated_data })
             }
             group::ReceivedMessage::Commit(commit_message) => {
                 let committer =
                     Arc::new(index_to_identity(&group, commit_message.committer)?.into());
                 let roster_update = RosterUpdate::new(commit_message.state_update.roster_update());
+                let authenticated_data = commit_message.authenticated_data.to_vec();
                 Ok(ReceivedMessage::Commit {
                     committer,
                     roster_update,
+                    authenticated_data
                 })
             }
             group::ReceivedMessage::Proposal(proposal_message) => {
@@ -809,7 +836,8 @@ impl Group {
                     _ => todo!("External and NewMember proposal senders are not supported"),
                 };
                 let proposal = Arc::new(proposal_message.proposal.into());
-                Ok(ReceivedMessage::ReceivedProposal { sender, proposal })
+                let authenticated_data = proposal_message.authenticated_data.to_vec();
+                Ok(ReceivedMessage::ReceivedProposal { sender, proposal, authenticated_data })
             }
             // TODO: group::ReceivedMessage::GroupInfo does not have any
             // public methods (unless the "ffi" Cargo feature is set).
@@ -820,15 +848,127 @@ impl Group {
         }
     }
 
-    pub async fn members(&self) -> WrappedMembers {
+    //MARK: Germ helpers
+
+    /// # Warning
+    ///
+    /// The indexes within this roster do not correlate with indexes of users
+    /// within [`ReceivedMessage`] content descriptions due to the layout of
+    /// member information within a MLS group state.
+    pub async fn members(&self) -> Vec<MLSMember> {
         // let group = self.inner().await;
-        self.inner().await.roster().members().into()
+        self.inner().await
+            .roster()
+            .members()
+            .iter()
+            .map(|member| member.clone().into() )
+            .collect()
     }
 
     pub async fn group_id(&self) -> Vec<u8> {
         self.inner().await.group_id().to_vec()
     }
+
+    //MARK: Germ API
+    pub async fn commit_selected_proposals(
+        &self,
+        proposals_archives: Vec<ReceivedUpdate>
+    ) -> Result<CommitOutput, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let updates: Result<Vec<mls_rs::group::proposal::Proposal>, MlsError> = proposals_archives
+            .iter().map( |received_update| {
+                let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
+                    &mut received_update.encoded_update.as_slice()
+                );
+                if received_update.epoch == group.current_epoch() {
+                    Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
+                } else {
+                    return group.replace_proposal_variant(
+                        received_update.leaf_index,
+                        update_proposal?
+                    );
+                }
+            })
+            .collect();
+        group.commit_builder()
+            .raw_proposals(updates?)
+            .build().await?
+            .try_into()
+    }
+
+    //MARK: deprecate
+    pub async fn update_proposal_from_kp (
+        &self,
+        key_package_id: Vec<u8>,
+        signer: Option<SignatureSecretKey>
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let inner_proposal = self.inner().await
+            .update_proposal_from_kp(
+                key_package_id,
+                signer.map(|key| key.into())
+            )?;
+        Ok(Arc::new(inner_proposal.clone().into()))
+
+    }
+
+    pub async fn replacement_leaf_node(
+        &self,
+        to_replace: u32,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<Arc<SigningIdentity>>
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let mut group = self.inner().await;
+        let inner_proposal = group.replacement_proposal(
+            to_replace,
+            signer.map(|wrapper| wrapper.into()),
+            signing_identity.map(|wrapper| wrapper.inner.clone() )
+        )?;
+        return Ok(Arc::new(inner_proposal.clone().into()))
+    }
+
+    pub async fn propose_replace(
+        &self,
+        replace_proposal: Arc<ProposalFfi>,
+        authenticated_data: Vec<u8>,
+    ) -> Result<Message, MlSrsError> {
+        let mut group = self.inner().await;
+        let inner_message = group.propose_replace_variant(
+            arc_unwrap_or_clone(replace_proposal).into(),
+            authenticated_data
+        )?;
+        Ok(inner_message.into())
+    }
+
+    pub async fn abandon_replacement(
+        &self,
+        replace_proposal: Arc<ProposalFfi>
+    ) {
+        let mut group = self.inner().await;
+        let proposal = arc_unwrap_or_clone(replace_proposal).into();
+        group.abandon_replacement_variant(&proposal)
+    }
+
+    pub fn replace_member(
+        &self,
+        replace_proposal: Arc<ProposalFfi>
+    ) -> Result<CommitOutput, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let proposal = arc_unwrap_or_clone(replace_proposal).into();
+        
+        group.replace_member(proposal)?.try_into()
+    }
 }
+
+//MARK: Germ types
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ReceivedUpdate {
+    pub epoch: u64, //which epoch was this received for? determines if we convert to a replace
+    pub leaf_index: u32, //filling this outside, but should be able to determine this inside when processing an update
+    pub encoded_update: Vec<u8> //mls_encoded UpdateProposal object containing a leaf_node
+}
+
 
 #[cfg(test)]
 mod tests {

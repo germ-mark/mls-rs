@@ -9,6 +9,7 @@ use mls_rs_codec::{MlsDecode, MlsEncode, MlsSize};
 use mls_rs_core::error::IntoAnyError;
 use mls_rs_core::secret::Secret;
 use mls_rs_core::time::MlsTime;
+use mls_rs_core::key_package::KeyPackageStorage;
 
 use crate::cipher_suite::CipherSuite;
 use crate::client::MlsError;
@@ -242,6 +243,25 @@ impl NewMemberInfo {
     }
 }
 
+// An enum to reflect whether cached private information related to an update is for an Update
+// proposal or for a Replace proposal.  Update-related information is cleared on epoch change;
+// Replace-related information is not.
+#[derive(Copy, Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
+#[repr(u8)]
+enum PendingUpdateContext {
+    Update = 1u8,
+
+    #[cfg(feature = "replace_proposal")]
+    Replace = 2u8,
+}
+
+#[derive(Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
+struct PendingUpdate {
+    context: PendingUpdateContext,
+    secret_key: HpkeSecretKey,
+    signer: Option<SignatureSecretKey>,
+}
+
 /// An MLS end-to-end encrypted group.
 ///
 /// # Group Evolution
@@ -266,9 +286,9 @@ where
     private_tree: TreeKemPrivate,
     key_schedule: KeySchedule,
     #[cfg(all(feature = "std", feature = "by_ref_proposal"))]
-    pending_updates: HashMap<HpkePublicKey, (HpkeSecretKey, Option<SignatureSecretKey>)>, // Hash of leaf node hpke public key to secret key
+    pending_updates: HashMap<HpkePublicKey, PendingUpdate>, // Hash of leaf node hpke public key to secret key
     #[cfg(all(not(feature = "std"), feature = "by_ref_proposal"))]
-    pending_updates: Vec<(HpkePublicKey, (HpkeSecretKey, Option<SignatureSecretKey>))>,
+    pending_updates: Vec<(HpkePublicKey, PendingUpdate)>,
     pending_commit: Option<CommitGeneration>,
     #[cfg(feature = "psk")]
     previous_psk: Option<PskSecretInput>,
@@ -741,35 +761,61 @@ where
             }
         }
 
-        // Apply own update
+        // Apply own update or a Replace proposal replacing us
         let new_signer = None;
+        let updated_leaves = std::iter::empty();
 
-        #[cfg(feature = "by_ref_proposal")]
+        #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
         let mut new_signer = new_signer;
 
         #[cfg(feature = "by_ref_proposal")]
-        for p in &provisional_state.applied_proposals.updates {
-            if p.sender == Sender::Member(*self_index) {
-                let leaf_pk = &p.proposal.leaf_node.public_key;
+        let updated_leaves = updated_leaves.chain(
+            provisional_state
+                .applied_proposals
+                .update_senders
+                .iter()
+                .zip(provisional_state.applied_proposals.updates.iter())
+                .filter(|(&i, _p)| i.0 == *self_index)
+                .map(|(_i, p)| p.proposal.leaf_node.public_key.clone()),
+        );
 
-                // Update the leaf in the private tree if this is our update
-                #[cfg(feature = "std")]
-                let new_leaf_sk_and_signer = self.pending_updates.get(leaf_pk);
+        #[cfg(feature = "replace_proposal")]
+        let updated_leaves = updated_leaves.chain(
+            provisional_state
+                .applied_proposals
+                .replaces
+                .iter()
+                .filter(|p| p.proposal.to_replace.0 == *self_index)
+                .map(|p| p.proposal.leaf_node.public_key.clone()),
+        );
 
-                #[cfg(not(feature = "std"))]
-                let new_leaf_sk_and_signer = self
-                    .pending_updates
-                    .iter()
-                    .find_map(|(pk, sk)| (pk == leaf_pk).then_some(sk));
+        let mut updated_leaves = updated_leaves;
+        let self_update = updated_leaves.next();
 
-                let new_leaf_sk = new_leaf_sk_and_signer.map(|(sk, _)| sk.clone());
-                new_signer = new_leaf_sk_and_signer.and_then(|(_, sk)| sk.clone());
+        if updated_leaves.count() > 0 {
+            // XXX(RLB) This error code is wrong; might need a new value?  Or just not bother
+            // checking, assuming checks have been done upstream?  But then we might also need a
+            // new error code there.  In any case, we need to enforce that there are not multiple
+            // Update **or Replace** proposals for the same leaf.
+            return Err(MlsError::InvalidCommitSelfUpdate);
+        }
 
-                provisional_private_tree
-                    .update_leaf(new_leaf_sk.ok_or(MlsError::UpdateErrorNoSecretKey)?);
+        if let Some(leaf_pk) = self_update {
+            // Update the leaf in the private tree if this is our update
+            #[cfg(feature = "std")]
+            let pending_update = self.pending_updates.get(&leaf_pk);
 
-                break;
-            }
+            #[cfg(not(feature = "std"))]
+            let new_leaf_sk_and_signer = self
+                .pending_updates
+                .iter()
+                .find_map(|(pk, sk)| (pk == leaf_pk).then_some(sk));
+
+            let new_leaf_sk = pending_update.map(|upd| upd.secret_key.clone());
+            new_signer = pending_update.and_then(|upd| upd.signer.clone());
+
+            provisional_private_tree
+                .update_leaf(new_leaf_sk.ok_or(MlsError::UpdateErrorNoSecretKey)?);
         }
 
         Ok((provisional_private_tree, new_signer))
@@ -904,6 +950,199 @@ where
         signer: Option<SignatureSecretKey>,
         signing_identity: Option<SigningIdentity>,
     ) -> Result<Proposal, MlsError> {
+        let leaf_node = self
+            .updated_leaf_node(PendingUpdateContext::Update, signer, signing_identity)
+            .await?;
+        Ok(Proposal::Update(UpdateProposal { leaf_node }))
+    }
+
+    /// Create a proposal message that replaces another member.
+    ///
+    /// `authenticated_data` will be sent unencrypted along with the contents
+    /// of the proposal message.
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn propose_replace(
+        &mut self,
+        to_replace: u32,
+        leaf_node: LeafNode,
+        authenticated_data: Vec<u8>,
+    ) -> Result<MlsMessage, MlsError> {
+        let proposal = self.replace_proposal(to_replace, leaf_node).await?;
+        self.proposal_message(proposal, authenticated_data).await
+    }
+
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replace_proposal(
+        &mut self,
+        to_replace: u32,
+        leaf_node: LeafNode,
+    ) -> Result<Proposal, MlsError> {
+        Ok(Proposal::Replace(ReplaceProposal {
+            to_replace: LeafIndex(to_replace),
+            leaf_node,
+        }))
+    }
+
+    /// Create a fresh LeafNode that can be used to update this member's leaf.
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replacement_leaf_node(
+        &mut self,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<SigningIdentity>,
+    ) -> Result<LeafNode, MlsError> {
+        self.updated_leaf_node(PendingUpdateContext::Replace, signer, signing_identity)
+    }
+
+    /// Abandon any cached state corresponding to a replacement leaf node
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn abandon_replacement(&mut self, leaf_node: &LeafNode) {
+        #[cfg(feature = "std")]
+        {
+            self.pending_updates.retain(|pk, upd| {
+                upd.context != PendingUpdateContext::Replace || *pk != leaf_node.public_key
+            });
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            self.pending_updates.retain(|(pk, upd)| {
+                upd.context != PendingUpdateContext::Replace || *pk != leaf_node.public_key
+            });
+        }
+    }
+
+    //MARK: (MMX)
+    //Since LeafNode is not re-exported in mls-rs, we handle them outside the FFI as Proposal objects
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replacement_proposal(
+        &mut self,
+        to_replace: u32,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<SigningIdentity>
+    ) -> Result<Proposal, MlsError> {
+        let leaf_node = self.updated_leaf_node(PendingUpdateContext::Replace, signer, signing_identity)?;
+        return Ok(Proposal::Replace(ReplaceProposal {
+            to_replace: LeafIndex(to_replace),
+            leaf_node,
+        }))
+    }
+
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn replace_proposal_variant(
+        &mut self,
+        to_replace: u32,
+        update_proposal: UpdateProposal,
+    ) -> Result<Proposal, MlsError> {
+        Ok(Proposal::Replace(ReplaceProposal {
+            to_replace: LeafIndex(to_replace),
+            leaf_node: update_proposal.leaf_node,
+        }))
+    }
+
+    // Variant of the above that takes a Proposal object as input
+    /// Create a proposal message that replaces another member.
+    ///
+    /// `authenticated_data` will be sent unencrypted along with the contents
+    /// of the proposal message.
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn propose_replace_variant(
+        &mut self,
+        replace_proposal: Proposal,
+        authenticated_data: Vec<u8>,
+    ) -> Result<MlsMessage, MlsError> {
+        self.proposal_message(replace_proposal, authenticated_data).await
+    }
+
+    /// Abandon any cached state corresponding to a replacement leaf node
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn abandon_replacement_variant(&mut self, proposal: &Proposal) { 
+        if let Proposal::Replace(replace_proposal) = proposal {
+            self.abandon_replacement(&replace_proposal.leaf_node)
+        }
+    }
+
+    //MARK: update/ replace
+
+    ///From a keyPackage, generate an update proposal
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn update_proposal_from_kp(
+        &mut self,
+        key_package_id: Vec<u8>,
+        signer: Option<SignatureSecretKey>,
+        // signing_identity: Option<SigningIdentity>,
+    ) -> Result<Proposal, MlsError> {
+        let key_package_data = self.config
+            .key_package_repo()
+            .get(&key_package_id)
+            .await
+            .map_err(|err| MlsError::KeyPackageRepoError(err.into_any_error()))
+            .unwrap();
+        match key_package_data {
+            None => Err(MlsError::WelcomeKeyPackageNotFound),
+            Some(kp_data) => {
+                let key_package_gen = crate::key_package::KeyPackageGeneration::from_storage(key_package_id, kp_data)
+                    .unwrap();
+                let leaf_node = key_package_gen.key_package.leaf_node;
+
+                let pending_update = PendingUpdate {
+                    context: PendingUpdateContext::Replace,
+                    secret_key: key_package_gen.leaf_node_secret_key, // secret_key,
+                    signer: signer
+                };
+
+                 // Store the secret key in the pending updates storage for later
+                #[cfg(feature = "std")]
+                self.pending_updates
+                    .insert(leaf_node.public_key.clone(), pending_update);
+
+                #[cfg(not(feature = "std"))]
+                self.pending_updates
+                    .push((leaf_node.public_key.clone(), pending_update));
+
+                Ok(Proposal::Update(UpdateProposal { leaf_node } ))
+            } 
+        }
+        
+    }
+
+
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    //since the leaf_node types are private, more sensible to implement the application of the replace here:
+    pub async fn replace_member(
+        &mut self,
+        replace_proposal: Proposal
+    ) -> Result<CommitOutput, MlsError> {
+        match replace_proposal {
+            crate::group::proposal::Proposal::Replace(proposal_inner) => return self
+                .commit_builder()
+                .replace_member(proposal_inner.to_replace.0, proposal_inner.leaf_node)?
+                .build()
+                .await,
+            _ => return Err(MlsError::RequiredProposalNotFound(crate::group::proposal::ProposalType::new(8)))
+        }
+    }
+
+    //MARK: end (MMX)
+
+    /// Create a fresh LeafNode that can be used to update this member's leaf.
+    #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    async fn updated_leaf_node(
+        &mut self,
+        context: PendingUpdateContext,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<SigningIdentity>,
+    ) -> Result<LeafNode, MlsError> {
         // Grab a copy of the current node and update it to have new key material
         let mut new_leaf_node = self.current_user_leaf_node()?.clone();
 
@@ -918,18 +1157,22 @@ where
             )
             .await?;
 
+        let pending_update = PendingUpdate {
+            context,
+            secret_key,
+            signer,
+        };
+
         // Store the secret key in the pending updates storage for later
         #[cfg(feature = "std")]
         self.pending_updates
-            .insert(new_leaf_node.public_key.clone(), (secret_key, signer));
+            .insert(new_leaf_node.public_key.clone(), pending_update);
 
         #[cfg(not(feature = "std"))]
         self.pending_updates
-            .push((new_leaf_node.public_key.clone(), (secret_key, signer)));
+            .push((new_leaf_node.public_key.clone(), pending_update));
 
-        Ok(Proposal::Update(UpdateProposal {
-            leaf_node: new_leaf_node,
-        }))
+        Ok(new_leaf_node)
     }
 
     /// Create a proposal message that removes an existing member from the
@@ -1785,10 +2028,23 @@ where
         #[cfg(feature = "by_ref_proposal")]
         self.state.proposals.clear();
 
-        // Clear the pending updates list
-        #[cfg(feature = "by_ref_proposal")]
+        // Remove any state corresponding to Update proposals
+        #[cfg(all(
+            feature = "std",
+            any(feature = "by_ref_proposal", feature = "replace_proposal")
+        ))]
         {
-            self.pending_updates = Default::default();
+            self.pending_updates
+                .retain(|_pk, upd| upd.context != PendingUpdateContext::Update);
+        }
+
+        #[cfg(all(
+            not(feature = "std"),
+            any(feature = "by_ref_proposal", feature = "replace_proposal")
+        ))]
+        {
+            self.pending_updates
+                .retain(|(_pk, upd)| upd.context != PendingUpdateContext::Update);
         }
 
         self.pending_commit = None;
