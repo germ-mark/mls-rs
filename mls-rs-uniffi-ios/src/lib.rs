@@ -198,6 +198,10 @@ impl Message {
             .map_err(|err| err.into_any_error())?;
         Ok(result)
      }
+
+      pub fn group_id(&self) -> Option<Vec<u8>> {
+         self.inner.group_id().map(|id| id.to_vec())
+      }
 }
 
 impl From<mls_rs::MlsMessage> for Message {
