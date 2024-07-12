@@ -943,9 +943,10 @@ where
         self.proposal_message(proposal, authenticated_data).await
     }
 
+    //(MMX) marked this pub so we can use it in uniffi-ios
     #[cfg(feature = "by_ref_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
-    async fn update_proposal(
+    pub async fn update_proposal(
         &mut self,
         signer: Option<SignatureSecretKey>,
         signing_identity: Option<SigningIdentity>,

@@ -906,12 +906,37 @@ impl Group {
                 .build().await?
                 .try_into()
         }
-        
-       
+    }
+
+    //for proposing in my own group
+    pub async fn propose_update_with_identity (
+        &self,
+        signer: SignatureSecretKey,
+        signature_key_data: Vec<u8>,
+        basic_credential: Vec<u8>,
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let signing_identity = identity::SigningIdentity::new(
+            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
+            signature_key_data.into(),
+        );
+        let mut group = self.inner().await;
+
+        let proposal = group.update_proposal(Some(signer.into()), Some(signing_identity) );
+        Ok(Arc::new(proposal?.clone().into() ))
+    }
+
+    //just a new leaf node
+    pub async fn propose_update (
+        &self,
+    ) -> Result<Arc<ProposalFfi>, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let proposal = group.update_proposal(None, None);
+        Ok(Arc::new(proposal?.clone().into() ))
     }
 
     //for proposing in other groups
-    pub async fn propose_update_with_identity(
+    pub async fn propose_update_message_with_identity(
         &self,
         signer: SignatureSecretKey,
         signature_key_data: Vec<u8>,
