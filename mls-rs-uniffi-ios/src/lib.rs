@@ -873,7 +873,8 @@ impl Group {
     //MARK: Germ API
     pub async fn commit_selected_proposals(
         &self,
-        proposals_archives: Vec<ReceivedUpdate>
+        proposals_archives: Vec<ReceivedUpdate>,
+        my_update: Option<Arc<ProposalFfi>> // output of propose_update_with_identity
     ) -> Result<CommitOutput, MlSrsError> {
         let mut group = self.inner().await;
 
@@ -892,12 +893,24 @@ impl Group {
                 }
             })
             .collect();
-        group.commit_builder()
-            .raw_proposals(updates?)
-            .build().await?
-            .try_into()
+
+        let builder = group.commit_builder()
+            .raw_proposals(updates?);
+
+        if let Some(my_update_val) = my_update {
+            builder.raw_proposal(my_update_val._inner.clone())
+                .build().await?
+                .try_into()
+        } else {
+            builder
+                .build().await?
+                .try_into()
+        }
+        
+       
     }
 
+    //for proposing in other groups
     pub async fn propose_update_with_identity(
         &self,
         signer: SignatureSecretKey,
