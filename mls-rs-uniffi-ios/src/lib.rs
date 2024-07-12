@@ -325,6 +325,30 @@ pub enum ReceivedMessage {
     KeyPackage,
 }
 
+//MARK: (MMX) added objects
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct MLSMember {
+    pub index: u32,
+    /// Current identity public key and credential of this member.
+    pub signing_identity: Arc<SigningIdentity>
+}
+
+impl From<mls_rs::group::Member> for MLSMember {
+    fn from(inner: mls_rs::group::Member) -> Self {
+        Self { 
+            index: inner.index,
+            signing_identity: Arc::new(inner.signing_identity.clone().into())
+        }
+    }
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ReceivedUpdate {
+    pub epoch: u64, //which epoch was this received for? determines if we convert to a replace
+    pub leaf_index: u32, //filling this outside, but should be able to determine this inside when processing an update
+    pub encoded_update: Vec<u8> //mls_encoded UpdateProposal object containing a leaf_node
+}
+
 /// Supported cipher suites.
 ///
 /// This is a subset of the cipher suites found in
