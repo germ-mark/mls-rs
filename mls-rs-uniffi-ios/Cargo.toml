@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 uniffi = { git = "https://github.com/mozilla/uniffi-rs/", rev = "eeb785c", version = "0.27.0" }
-mls-rs = { version = "0.39.0", path = "../mls-rs" }
+mls-rs = { version = "0.39.0", path = "../mls-rs", features = ["replace_proposal"]}
 mls-rs-core = { version = "0.18.0", path = "../mls-rs-core" }
 mls-rs-crypto-cryptokit = { version = "0.1.0", path = "../mls-rs-crypto-cryptokit" }
 
