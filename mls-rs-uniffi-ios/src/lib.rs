@@ -211,28 +211,6 @@ impl From<mls_rs::MlsMessage> for Message {
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-pub struct WrappedMembers {
-    inner: Vec<mls_rs::group::Member>
-}
-
-impl From<Vec<mls_rs::group::Member>> for WrappedMembers {
-    fn from(inner: Vec<mls_rs::group::Member>) -> Self {
-        Self { inner }
-    }
-}
-
-#[uniffi::export]
-impl WrappedMembers {
-    pub fn signing_identities(&self) -> Vec<Arc<SigningIdentity>> {
-        self.inner
-            .iter()
-            .map(|member| Arc::new(member.signing_identity.clone().into()) )
-            .collect()
-            // .map(|signing_identity| Arc::new(signing_identity;
-    }
-}
-
-#[derive(Clone, Debug, uniffi::Object)]
 pub struct Proposal {
     _inner: mls_rs::group::proposal::Proposal,
 }
@@ -871,13 +849,53 @@ impl Group {
         }
     }
 
-    pub async fn members(&self) -> WrappedMembers {
+    //MARK: Germ helpers
+     /// # Warning
+    ///
+    /// The indexes within this roster do not correlate with indexes of users
+    /// within [`ReceivedMessage`] content descriptions due to the layout of
+    /// member information within a MLS group state.
+    pub async fn members(&self) -> Vec<MLSMember> {
         // let group = self.inner().await;
-        self.inner().await.roster().members().into()
+        self.inner().await
+            .roster()
+            .members()
+            .iter()
+            .map(|member| member.clone().into() )
+            .collect()
     }
 
     pub async fn group_id(&self) -> Vec<u8> {
         self.inner().await.group_id().to_vec()
+    }
+
+      //for proposing in my own group
+    pub async fn propose_update_with_identity (
+        &self,
+        signer: SignatureSecretKey,
+        signature_key_data: Vec<u8>,
+        basic_credential: Vec<u8>,
+        authenticated_data: Vec<u8>
+    ) -> Result<Message, MlSrsError> {
+        let signing_identity = identity::SigningIdentity::new(
+            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
+            signature_key_data.into(),
+        );
+        let mut group = self.inner().await;
+
+        let message = group.propose_update_with_identity(signer.into(), signing_identity, authenticated_data);
+        Ok(message?.into())
+    }
+
+    //just a new leaf node
+    pub async fn propose_update (
+        &self,
+        authenticated_data: Vec<u8>
+    ) -> Result<Message, MlSrsError> {
+        let mut group = self.inner().await;
+
+        let message = group.propose_update(authenticated_data);
+         Ok(message?.into())
     }
 }
 
