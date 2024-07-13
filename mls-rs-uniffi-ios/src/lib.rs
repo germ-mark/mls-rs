@@ -75,6 +75,8 @@ pub enum MlSrsError {
         #[from]
         inner: uniffi::UnexpectedUniFFICallbackError,
     },
+    #[error("Unexpected message format")]
+    UnexpecteMessageFormat
 }
 
 impl IntoAnyError for MlSrsError {}
@@ -897,6 +899,12 @@ impl Group {
         let message = group.propose_update(authenticated_data);
          Ok(message?.into())
     }
+}
+
+#[uniffi::export]
+//to let us staple a commit to a message from the next epoch, we tuck the commit into the message's authenticated data
+pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Message, MlSrsError> {
+    Ok(mls_rs::MlsMessage::extract_stapled_commit(message_data)?.into())
 }
 
 #[cfg(test)]
