@@ -540,18 +540,23 @@ impl MlsMessage {
 }
 
 impl MlsMessage {
-    pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<MlsMessage, MlsError> {
+    pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
         let auth_data = MlsMessage::from_bytes(message_data.as_slice())?
             .into_ciphertext()
             .unwrap()
             .authenticated_data;
+
+        if auth_data.is_empty() { 
+            return Ok(None)
+        }
+
         let inner_message = MlsMessage::from_bytes( auth_data.as_slice() )?;
         let inner_content_type = inner_message.clone()
             .into_ciphertext()
             .unwrap()
             .content_type;
         match inner_content_type {
-            ContentType::Commit => return Ok(inner_message),
+            ContentType::Commit => return Ok(Some(inner_message)),
             _ => Err(MlsError::UnexpectedMessageType)
         }
     }

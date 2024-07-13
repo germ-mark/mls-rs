@@ -903,8 +903,9 @@ impl Group {
 
 #[uniffi::export]
 //to let us staple a commit to a message from the next epoch, we tuck the commit into the message's authenticated data
-pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Message, MlSrsError> {
-    Ok(mls_rs::MlsMessage::extract_stapled_commit(message_data)?.into())
+pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<Arc<Message>>, MlSrsError> {
+    Ok(mls_rs::MlsMessage::extract_stapled_commit(message_data)?
+        .map(|message| Arc::new(message.into())))
 }
 
 #[cfg(test)]
