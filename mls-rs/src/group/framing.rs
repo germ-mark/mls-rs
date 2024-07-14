@@ -541,21 +541,25 @@ impl MlsMessage {
 
 impl MlsMessage {
     pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
-        let auth_data = MlsMessage::from_bytes(message_data.as_slice())?
-            .into_ciphertext()
-            .unwrap()
-            .authenticated_data;
+        let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
+            .into_ciphertext();
 
-        if auth_data.is_empty() { 
+        let Some(ciphertext) = ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+
+        if ciphertext.authenticated_data.is_empty() { 
             return Ok(None)
         }
 
-        let inner_message = MlsMessage::from_bytes( auth_data.as_slice() )?;
-        let inner_content_type = inner_message.clone()
-            .into_ciphertext()
-            .unwrap()
-            .content_type;
-        match inner_content_type {
+        let inner_message = MlsMessage::from_bytes( ciphertext.authenticated_data.as_slice() )?;
+        let inner_ciphertext_maybe = inner_message.clone()
+            .into_ciphertext();
+        let Some(inner_ciphertext) = inner_ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+
+        match inner_ciphertext.content_type {
             ContentType::Commit => return Ok(Some(inner_message)),
             _ => Err(MlsError::UnexpectedMessageType)
         }
