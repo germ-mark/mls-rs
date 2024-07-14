@@ -1233,6 +1233,11 @@ where
         self.state.proposals.clear()
     }
 
+    //(MMX)
+    pub fn proposal_cache_is_empty(&mut self) -> bool {
+        self.state.proposals.is_empty()
+    }
+
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
     pub(crate) async fn format_for_wire(
         &mut self,

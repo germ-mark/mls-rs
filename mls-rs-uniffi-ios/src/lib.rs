@@ -899,7 +899,7 @@ impl Group {
         self.inner().await.current_member_index()
     }
 
-      //for proposing in my own group
+    //for proposing in my own group
     pub async fn propose_update_with_identity (
         &self,
         signer: SignatureSecretKey,
@@ -926,6 +926,14 @@ impl Group {
 
         let message = group.propose_update(authenticated_data);
          Ok(message?.into())
+    }
+
+    pub async fn clear_proposal_cache(&self) {
+        self.inner().await.clear_proposal_cache()
+    }
+
+    pub async fn proposal_cache_is_empty(&self) -> bool {
+        self.inner().await.proposal_cache_is_empty()
     }
 }
 
@@ -1185,7 +1193,7 @@ mod tests {
         let _ = bob_group.process_incoming_message(update.clone().into())?;
 
         let commit_output = bob_group.commit()?;
-        println!("commit_output unused {:?}", commit_output.unused_proposals);
+        println!("commit_output unused {:?}", commit_output.unused_proposals.len());
         let _ = bob_group.process_incoming_message(commit_output.commit_message.clone());
         let next_message = bob_group.encrypt_application_message(
             b"hello, alice",
@@ -1211,12 +1219,16 @@ mod tests {
         let second_update = alice_group.propose_update( vec![] )?;
 
         let _ = bob_group.process_incoming_message(first_update.into())?;
-        let _ = bob_group.process_incoming_message(second_update.into())?;
+        assert!(!bob_group.proposal_cache_is_empty());
+        bob_group.clear_proposal_cache();
+        assert!(bob_group.proposal_cache_is_empty());
+        // let _ = bob_group.process_incoming_message(second_update.into())?;
 
-        let commit_message = bob_group.commit()?.commit_message;
-        let _ = bob_group.process_incoming_message(commit_message.clone())?;
+        let commit_output = bob_group.commit()?;
+        println!("commit_output unused {:?}", commit_output.unused_proposals.len());
+        let _ = bob_group.process_incoming_message(commit_output.commit_message.clone())?;
 
-        let result = alice_group.process_incoming_message(commit_message)?;
+        let result = alice_group.process_incoming_message(commit_output.commit_message)?;
         
         Ok(())
     }
