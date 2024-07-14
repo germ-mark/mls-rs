@@ -212,6 +212,10 @@ impl Message {
     pub fn epoch(&self) -> Option<u64> {
         self.inner.epoch()
     }
+
+    pub fn private_message_content_type(&self) -> Option<u8> {
+        self.inner.private_message_content_type()
+    }
 }
 
 impl From<mls_rs::MlsMessage> for Message {

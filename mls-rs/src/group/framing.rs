@@ -539,7 +539,16 @@ impl MlsMessage {
     }
 }
 
+// Germ
 impl MlsMessage {
+    pub fn private_message_content_type(&self) -> Option<u8> {
+        let ciphertext_maybe = self.clone().into_ciphertext();
+        let Some(ciphertext) = ciphertext_maybe else {
+            return None
+        };
+        Some(ciphertext.content_type as u8)
+    }
+
     pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
         let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
             .into_ciphertext();
