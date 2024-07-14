@@ -992,83 +992,7 @@ mod tests {
     #[test]
     #[cfg(not(mls_build_async))]
     fn test_simple_scenario() -> Result<(), MlSrsError> {
-        #[derive(Debug, Default)]
-        struct GroupStateData {
-            state: Vec<u8>,
-            epoch_data: Vec<EpochRecord>,
-        }
 
-        #[derive(Debug)]
-        struct CustomGroupStateStorage {
-            groups: Mutex<HashMap<Vec<u8>, GroupStateData>>,
-        }
-
-        impl CustomGroupStateStorage {
-            fn new() -> Self {
-                Self {
-                    groups: Mutex::new(HashMap::new()),
-                }
-            }
-
-            fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, GroupStateData>> {
-                self.groups.lock().unwrap()
-            }
-        }
-
-        impl GroupStateStorage for CustomGroupStateStorage {
-            fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, MlSrsError> {
-                let groups = self.lock();
-                Ok(groups.get(&group_id).map(|group| group.state.clone()))
-            }
-
-            fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, MlSrsError> {
-                let groups = self.lock();
-                match groups.get(&group_id) {
-                    Some(group) => {
-                        let epoch_record =
-                            group.epoch_data.iter().find(|record| record.id == epoch_id);
-                        let data = epoch_record.map(|record| record.data.clone());
-                        Ok(data)
-                    }
-                    None => Ok(None),
-                }
-            }
-
-            fn write(
-                &self,
-                group_id: Vec<u8>,
-                group_state: Vec<u8>,
-                epoch_inserts: Vec<EpochRecord>,
-                epoch_updates: Vec<EpochRecord>,
-            ) -> Result<(), MlSrsError> {
-                let mut groups = self.lock();
-
-                let group = groups.entry(group_id).or_default();
-                group.state = group_state;
-                for insert in epoch_inserts {
-                    group.epoch_data.push(insert);
-                }
-
-                for update in epoch_updates {
-                    for epoch in group.epoch_data.iter_mut() {
-                        if epoch.id == update.id {
-                            epoch.data = update.data;
-                            break;
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-
-            fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, MlSrsError> {
-                let groups = self.lock();
-                Ok(groups
-                    .get(&group_id)
-                    .and_then(|GroupStateData { epoch_data, .. }| epoch_data.last())
-                    .map(|last| last.id))
-            }
-        }
 
         let alice_config = ClientConfig {
             group_state_storage: Arc::new(CustomGroupStateStorage::new()),
@@ -1108,87 +1032,9 @@ mod tests {
         Ok(())
     }
 
-        #[test]
+    #[test]
     #[cfg(not(mls_build_async))]
     fn test_germ_scenario() -> Result<(), MlSrsError> {
-        #[derive(Debug, Default)]
-        struct GroupStateData {
-            state: Vec<u8>,
-            epoch_data: Vec<EpochRecord>,
-        }
-
-        #[derive(Debug)]
-        struct CustomGroupStateStorage {
-            groups: Mutex<HashMap<Vec<u8>, GroupStateData>>,
-        }
-
-        impl CustomGroupStateStorage {
-            fn new() -> Self {
-                Self {
-                    groups: Mutex::new(HashMap::new()),
-                }
-            }
-
-            fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, GroupStateData>> {
-                self.groups.lock().unwrap()
-            }
-        }
-
-        impl GroupStateStorage for CustomGroupStateStorage {
-            fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, MlSrsError> {
-                let groups = self.lock();
-                Ok(groups.get(&group_id).map(|group| group.state.clone()))
-            }
-
-            fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, MlSrsError> {
-                let groups = self.lock();
-                match groups.get(&group_id) {
-                    Some(group) => {
-                        let epoch_record =
-                            group.epoch_data.iter().find(|record| record.id == epoch_id);
-                        let data = epoch_record.map(|record| record.data.clone());
-                        Ok(data)
-                    }
-                    None => Ok(None),
-                }
-            }
-
-            fn write(
-                &self,
-                group_id: Vec<u8>,
-                group_state: Vec<u8>,
-                epoch_inserts: Vec<EpochRecord>,
-                epoch_updates: Vec<EpochRecord>,
-            ) -> Result<(), MlSrsError> {
-                let mut groups = self.lock();
-
-                let group = groups.entry(group_id).or_default();
-                group.state = group_state;
-                for insert in epoch_inserts {
-                    group.epoch_data.push(insert);
-                }
-
-                for update in epoch_updates {
-                    for epoch in group.epoch_data.iter_mut() {
-                        if epoch.id == update.id {
-                            epoch.data = update.data;
-                            break;
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-
-            fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, MlSrsError> {
-                let groups = self.lock();
-                Ok(groups
-                    .get(&group_id)
-                    .and_then(|GroupStateData { epoch_data, .. }| epoch_data.last())
-                    .map(|last| last.id))
-            }
-        }
-
         let alice_config = ClientConfig {
             group_state_storage: Arc::new(CustomGroupStateStorage::new()),
             ..Default::default()
@@ -1306,5 +1152,83 @@ mod tests {
 
         assert_eq!(ratchet_tree, group.inner().export_tree());
         Ok(())
+    }
+
+    #[derive(Debug, Default)]
+    struct GroupStateData {
+        state: Vec<u8>,
+        epoch_data: Vec<EpochRecord>,
+    }
+
+    #[derive(Debug)]
+    struct CustomGroupStateStorage {
+        groups: Mutex<HashMap<Vec<u8>, GroupStateData>>,
+    }
+
+    impl CustomGroupStateStorage {
+        fn new() -> Self {
+            Self {
+                groups: Mutex::new(HashMap::new()),
+            }
+        }
+
+        fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, GroupStateData>> {
+            self.groups.lock().unwrap()
+        }
+    }
+
+    impl GroupStateStorage for CustomGroupStateStorage {
+        fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, MlSrsError> {
+            let groups = self.lock();
+            Ok(groups.get(&group_id).map(|group| group.state.clone()))
+        }
+
+        fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, MlSrsError> {
+            let groups = self.lock();
+            match groups.get(&group_id) {
+                Some(group) => {
+                    let epoch_record =
+                    group.epoch_data.iter().find(|record| record.id == epoch_id);
+                    let data = epoch_record.map(|record| record.data.clone());
+                    Ok(data)
+                }
+                None => Ok(None),
+            }
+        }
+
+        fn write(
+            &self,
+            group_id: Vec<u8>,
+            group_state: Vec<u8>,
+            epoch_inserts: Vec<EpochRecord>,
+            epoch_updates: Vec<EpochRecord>,
+            ) -> Result<(), MlSrsError> {
+            let mut groups = self.lock();
+
+            let group = groups.entry(group_id).or_default();
+            group.state = group_state;
+            for insert in epoch_inserts {
+                group.epoch_data.push(insert);
+            }
+
+            for update in epoch_updates {
+                for epoch in group.epoch_data.iter_mut() {
+                    if epoch.id == update.id {
+                        epoch.data = update.data;
+                        break;
+                    }
+                }
+            }
+
+            Ok(())
+        }
+
+        fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, MlSrsError> {
+            let groups = self.lock();
+            Ok(groups
+                .get(&group_id)
+                .and_then(|GroupStateData { epoch_data, .. }| epoch_data.last())
+                .map(|last| last.id))
+        }
     }
 }
