@@ -1077,6 +1077,36 @@ mod tests {
 
     #[test]
     #[cfg(not(mls_build_async))]
+    fn test_update_reflect() -> Result<(), MlSrsError> {
+        let (alice_group, bob_group) = setup_test()?;
+
+        let alice_update = alice_group.propose_update( vec![] )?;
+        alice_group.clear_proposal_cache();
+
+        let received_message = bob_group.process_incoming_message(Arc::new(alice_update))?;
+        let ReceivedMessage::ReceivedProposal{
+            sender, 
+            proposal,
+            authenticated_data
+        } = received_message.clone().into() else {
+            panic!("Wrong message type: {received_message:?}")
+        };
+
+        let reflected = bob_group.reflect_update(
+            0,
+            proposal,
+            vec![]
+        )?;
+
+        let _ = alice_group.process_incoming_message(reflected);
+        let commit = alice_group.commit()?;
+        alice_group.process_incoming_message(commit.commit_message);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(mls_build_async))]
     fn test_ratchet_tree_not_included() -> Result<(), MlSrsError> {
         let alice_config = ClientConfig {
             use_ratchet_tree_extension: true,
