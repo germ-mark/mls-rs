@@ -947,6 +947,11 @@ impl Group {
     pub async fn proposal_cache_is_empty(&self) -> bool {
         self.inner().await.proposal_cache_is_empty()
     }
+
+    pub async fn member_at_index(&self, index: u32) -> Option<MLSMember> {
+        self.inner().await.member_at_index(index)
+            .map(|message| message.into())
+    }
 }
 
 #[uniffi::export]
