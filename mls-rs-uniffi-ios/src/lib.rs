@@ -201,9 +201,17 @@ impl Message {
         Ok(result)
      }
 
-      pub fn group_id(&self) -> Option<Vec<u8>> {
-         self.inner.group_id().map(|id| id.to_vec())
-      }
+    pub fn group_id(&self) -> Option<Vec<u8>> {
+        self.inner.group_id().map(|id| id.to_vec())
+    }
+
+    pub fn wire_format(&self) -> u16 {
+        self.inner.wire_format() as u16
+    }
+
+    pub fn epoch(&self) -> Option<u64> {
+        self.inner.epoch()
+    }
 }
 
 impl From<mls_rs::MlsMessage> for Message {
@@ -1217,6 +1225,9 @@ mod tests {
         //test multiple updates
         let first_update = alice_group.propose_update( vec![] )?;
         let second_update = alice_group.propose_update( vec![] )?;
+
+        let extracted = extract_stapled_commit(first_update.to_bytes()?)?;
+        assert!(extracted.is_none());
 
         let _ = bob_group.process_incoming_message(first_update.into())?;
         assert!(!bob_group.proposal_cache_is_empty());
