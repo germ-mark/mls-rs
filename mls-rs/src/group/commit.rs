@@ -1114,6 +1114,7 @@ mod tests {
         assert_commit_builder_output(group, commit_output, vec![expected_remove], 0);
     }
 
+    #[cfg(feature = "replace_proposal")]
     fn replacement_leaf_node<C>(group: &mut Group<C>) -> Result<LeafNode, MlsError>
     where
         C: ClientConfig + Clone,
