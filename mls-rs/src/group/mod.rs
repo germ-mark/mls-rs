@@ -975,6 +975,28 @@ where
         self.proposal_message(proposal, authenticated_data).await
     }
 
+    /// variant of propose_replace that passes in a Proposal object
+    /// containing an update
+    /// caller should have authenticated this leafNode with the AS
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn propose_replace_variant(
+        &mut self,
+        to_replace: u32,
+        proposal: Proposal,
+        authenticated_data: Vec<u8>,
+    ) -> Result<MlsMessage, MlsError> {
+        let crate::group::Proposal::Update(update_proposal) = proposal else {
+            return Err(MlsError::UnexpectedMessageType);
+        };
+
+        let proposal = self.replace_proposal(
+            to_replace,
+            update_proposal.leaf_node
+        ).await?;
+        self.proposal_message(proposal, authenticated_data).await
+    }
+
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
     pub async fn replace_proposal(

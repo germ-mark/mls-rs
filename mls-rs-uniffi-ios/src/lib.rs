@@ -952,6 +952,25 @@ impl Group {
         self.inner().await.member_at_index(index)
             .map(|message| message.into())
     }
+
+    //reflect a proposal 
+    //Committers can't commit their own update, so another member has to reflect it
+    //back to them
+    //They also can't convert it to a Replace, so more sensible to preemptively 
+    //send it as a 
+    pub async fn reflect_update(
+        &self,
+        to_replace: u32,
+        proposal: Arc<Proposal>,
+        authenticated_data: Vec<u8>
+    ) -> Result<Arc<Message>, MlSrsError> {
+        let message = self.inner().await.propose_replace_variant(
+            to_replace,
+            arc_unwrap_or_clone(proposal)._inner,
+            authenticated_data
+        )?;
+        Ok(Arc::new(message.into()))
+    }
 }
 
 #[uniffi::export]
