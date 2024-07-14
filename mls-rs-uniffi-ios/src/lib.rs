@@ -877,6 +877,14 @@ impl Group {
         self.inner().await.group_id().to_vec()
     }
 
+    pub async fn current_epoch(&self) -> u64 {
+        self.inner().await.current_epoch()
+    }
+
+    pub async fn current_member_index(&self) -> u32 {
+        self.inner().await.current_member_index()
+    }
+
       //for proposing in my own group
     pub async fn propose_update_with_identity (
         &self,
