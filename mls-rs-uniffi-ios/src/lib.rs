@@ -421,7 +421,13 @@ impl Client {
         let commit_options = mls_rules::CommitOptions::default()
             .with_ratchet_tree_extension(client_config.use_ratchet_tree_extension)
             .with_single_welcome_message(true);
-        let mls_rules = mls_rules::DefaultMlsRules::new().with_commit_options(commit_options);
+        let encryption_options =  mls_rules::EncryptionOptions::new(
+            true, //encrypt control messages
+            mls_rs::client_builder::PaddingMode::StepFunction
+        );
+        let mls_rules = mls_rules::DefaultMlsRules::new()
+            .with_commit_options(commit_options)
+            .with_encryption_options(encryption_options);
         let client = mls_rs::Client::builder()
             .crypto_provider(crypto_provider)
             .identity_provider(basic::BasicIdentityProvider::new())
@@ -919,7 +925,7 @@ mod tests {
 
     #[test]
     #[cfg(not(mls_build_async))]
-    fn test_simple_scenario() -> Result<(), Error> {
+    fn test_simple_scenario() -> Result<(), MlSrsError> {
         #[derive(Debug, Default)]
         struct GroupStateData {
             state: Vec<u8>,
@@ -944,12 +950,12 @@ mod tests {
         }
 
         impl GroupStateStorage for CustomGroupStateStorage {
-            fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, Error> {
+            fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, MlSrsError> {
                 let groups = self.lock();
                 Ok(groups.get(&group_id).map(|group| group.state.clone()))
             }
 
-            fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, Error> {
+            fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, MlSrsError> {
                 let groups = self.lock();
                 match groups.get(&group_id) {
                     Some(group) => {
@@ -968,7 +974,7 @@ mod tests {
                 group_state: Vec<u8>,
                 epoch_inserts: Vec<EpochRecord>,
                 epoch_updates: Vec<EpochRecord>,
-            ) -> Result<(), Error> {
+            ) -> Result<(), MlSrsError> {
                 let mut groups = self.lock();
 
                 let group = groups.entry(group_id).or_default();
@@ -989,7 +995,7 @@ mod tests {
                 Ok(())
             }
 
-            fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, Error> {
+            fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, MlSrsError> {
                 let groups = self.lock();
                 Ok(groups
                     .get(&group_id)
@@ -1020,12 +1026,15 @@ mod tests {
         let bob_group = bob
             .join_group(None, &commit.welcome_message.unwrap())?
             .group;
-        let message = alice_group.encrypt_application_message(b"hello, bob")?;
+        let message = alice_group.encrypt_application_message(
+            b"hello, bob",
+            vec![]
+        )?;
         let received_message = bob_group.process_incoming_message(Arc::new(message))?;
 
         alice_group.write_to_storage()?;
 
-        let ReceivedMessage::ApplicationMessage { sender: _, data } = received_message else {
+        let ReceivedMessage::ApplicationMessage { sender: _, data, authenticated_data: _ } = received_message else {
             panic!("Wrong message type: {received_message:?}");
         };
         assert_eq!(data, b"hello, bob");
@@ -1033,9 +1042,153 @@ mod tests {
         Ok(())
     }
 
+        #[test]
+    #[cfg(not(mls_build_async))]
+    fn test_germ_scenario() -> Result<(), MlSrsError> {
+        #[derive(Debug, Default)]
+        struct GroupStateData {
+            state: Vec<u8>,
+            epoch_data: Vec<EpochRecord>,
+        }
+
+        #[derive(Debug)]
+        struct CustomGroupStateStorage {
+            groups: Mutex<HashMap<Vec<u8>, GroupStateData>>,
+        }
+
+        impl CustomGroupStateStorage {
+            fn new() -> Self {
+                Self {
+                    groups: Mutex::new(HashMap::new()),
+                }
+            }
+
+            fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, GroupStateData>> {
+                self.groups.lock().unwrap()
+            }
+        }
+
+        impl GroupStateStorage for CustomGroupStateStorage {
+            fn state(&self, group_id: Vec<u8>) -> Result<Option<Vec<u8>>, MlSrsError> {
+                let groups = self.lock();
+                Ok(groups.get(&group_id).map(|group| group.state.clone()))
+            }
+
+            fn epoch(&self, group_id: Vec<u8>, epoch_id: u64) -> Result<Option<Vec<u8>>, MlSrsError> {
+                let groups = self.lock();
+                match groups.get(&group_id) {
+                    Some(group) => {
+                        let epoch_record =
+                            group.epoch_data.iter().find(|record| record.id == epoch_id);
+                        let data = epoch_record.map(|record| record.data.clone());
+                        Ok(data)
+                    }
+                    None => Ok(None),
+                }
+            }
+
+            fn write(
+                &self,
+                group_id: Vec<u8>,
+                group_state: Vec<u8>,
+                epoch_inserts: Vec<EpochRecord>,
+                epoch_updates: Vec<EpochRecord>,
+            ) -> Result<(), MlSrsError> {
+                let mut groups = self.lock();
+
+                let group = groups.entry(group_id).or_default();
+                group.state = group_state;
+                for insert in epoch_inserts {
+                    group.epoch_data.push(insert);
+                }
+
+                for update in epoch_updates {
+                    for epoch in group.epoch_data.iter_mut() {
+                        if epoch.id == update.id {
+                            epoch.data = update.data;
+                            break;
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+
+            fn max_epoch_id(&self, group_id: Vec<u8>) -> Result<Option<u64>, MlSrsError> {
+                let groups = self.lock();
+                Ok(groups
+                    .get(&group_id)
+                    .and_then(|GroupStateData { epoch_data, .. }| epoch_data.last())
+                    .map(|last| last.id))
+            }
+        }
+
+        let alice_config = ClientConfig {
+            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
+            ..Default::default()
+        };
+        let alice_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
+        let alice = Client::new(b"alice".to_vec(), alice_keypair, alice_config);
+
+        let bob_config = ClientConfig {
+            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
+            ..Default::default()
+        };
+        let bob_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
+        let bob = Client::new(b"bob".to_vec(), bob_keypair, bob_config);
+
+        let alice_group = alice.create_group(None)?;
+        let bob_key_package = bob.generate_key_package_message()?;
+        let commit = alice_group.add_members(vec![Arc::new(bob_key_package)])?;
+        alice_group.process_incoming_message(commit.commit_message)?;
+
+        let bob_group = bob
+            .join_group(None, &commit.welcome_message.unwrap())?
+            .group;
+        let message = alice_group.encrypt_application_message(
+            b"hello, bob",
+            vec![]
+        )?;
+        let received_message = bob_group.process_incoming_message(Arc::new(message))?;
+
+        alice_group.write_to_storage()?;
+
+        let ReceivedMessage::ApplicationMessage { sender: _, data, authenticated_data: _ } = received_message else {
+            panic!("Wrong message type: {received_message:?}");
+        };
+        assert_eq!(data, b"hello, bob");
+
+        //adding on additional germ steps here 
+        let update = bob_group.propose_update( vec![] )?;
+        let _ = bob_group.process_incoming_message(update.clone().into())?;
+
+        let commit_message = bob_group.commit()?.commit_message;
+        let _ = bob_group.process_incoming_message(commit_message.clone());
+        let next_message = bob_group.encrypt_application_message(
+            b"hello, alice",
+            commit_message.to_bytes()?
+        )?;
+
+        let extracted_commit_maybe = extract_stapled_commit(next_message.to_bytes()?)?;
+        let Some(extracted_commit) = extracted_commit_maybe else {
+            panic!("Missing stapled commit")
+        };
+
+        let _ = alice_group.process_incoming_message(extracted_commit);
+        let received = alice_group.process_incoming_message(Arc::new(next_message))?;
+
+        let ReceivedMessage::ApplicationMessage { sender: _, data: next_data, authenticated_data: _ } = received else {
+            panic!("Wrong message type: {received:?}");
+        };
+
+        assert_eq!(next_data, b"hello, alice");
+
+        Ok(())
+    }
+
     #[test]
     #[cfg(not(mls_build_async))]
-    fn test_ratchet_tree_not_included() -> Result<(), Error> {
+    fn test_ratchet_tree_not_included() -> Result<(), MlSrsError> {
         let alice_config = ClientConfig {
             use_ratchet_tree_extension: true,
             ..ClientConfig::default()
@@ -1051,7 +1204,7 @@ mod tests {
 
     #[test]
     #[cfg(not(mls_build_async))]
-    fn test_ratchet_tree_included() -> Result<(), Error> {
+    fn test_ratchet_tree_included() -> Result<(), MlSrsError> {
         let alice_config = ClientConfig {
             use_ratchet_tree_extension: false,
             ..ClientConfig::default()
