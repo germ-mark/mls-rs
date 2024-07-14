@@ -992,30 +992,7 @@ mod tests {
     #[test]
     #[cfg(not(mls_build_async))]
     fn test_simple_scenario() -> Result<(), MlSrsError> {
-
-
-        let alice_config = ClientConfig {
-            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
-            ..Default::default()
-        };
-        let alice_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
-        let alice = Client::new(b"alice".to_vec(), alice_keypair, alice_config);
-
-        let bob_config = ClientConfig {
-            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
-            ..Default::default()
-        };
-        let bob_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
-        let bob = Client::new(b"bob".to_vec(), bob_keypair, bob_config);
-
-        let alice_group = alice.create_group(None)?;
-        let bob_key_package = bob.generate_key_package_message()?;
-        let commit = alice_group.add_members(vec![Arc::new(bob_key_package)])?;
-        alice_group.process_incoming_message(commit.commit_message)?;
-
-        let bob_group = bob
-            .join_group(None, &commit.welcome_message.unwrap())?
-            .group;
+        let (alice_group, bob_group) = setup_test()?;
         let message = alice_group.encrypt_application_message(
             b"hello, bob",
             vec![]
@@ -1035,28 +1012,8 @@ mod tests {
     #[test]
     #[cfg(not(mls_build_async))]
     fn test_germ_scenario() -> Result<(), MlSrsError> {
-        let alice_config = ClientConfig {
-            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
-            ..Default::default()
-        };
-        let alice_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
-        let alice = Client::new(b"alice".to_vec(), alice_keypair, alice_config);
+        let (alice_group, bob_group) = setup_test()?;
 
-        let bob_config = ClientConfig {
-            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
-            ..Default::default()
-        };
-        let bob_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
-        let bob = Client::new(b"bob".to_vec(), bob_keypair, bob_config);
-
-        let alice_group = alice.create_group(None)?;
-        let bob_key_package = bob.generate_key_package_message()?;
-        let commit = alice_group.add_members(vec![Arc::new(bob_key_package)])?;
-        alice_group.process_incoming_message(commit.commit_message)?;
-
-        let bob_group = bob
-            .join_group(None, &commit.welcome_message.unwrap())?
-            .group;
         let message = alice_group.encrypt_application_message(
             b"hello, bob",
             vec![]
@@ -1152,6 +1109,35 @@ mod tests {
 
         assert_eq!(ratchet_tree, group.inner().export_tree());
         Ok(())
+    }
+
+    fn setup_test() -> Result<(Group, Group), MlSrsError> {
+        let alice_config = ClientConfig {
+            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
+            ..Default::default()
+        };
+        let alice_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
+        let alice = Client::new(b"alice".to_vec(), alice_keypair, alice_config);
+
+        let bob_config = ClientConfig {
+            group_state_storage: Arc::new(CustomGroupStateStorage::new()),
+            ..Default::default()
+        };
+        let bob_keypair = generate_signature_keypair(CipherSuite::Curve25519ChaCha)?;
+        let bob = Client::new(b"bob".to_vec(), bob_keypair, bob_config);
+
+        let alice_group = alice.create_group(None)?;
+        let bob_key_package = bob.generate_key_package_message()?;
+        let commit = alice_group.add_members(vec![Arc::new(bob_key_package)])?;
+        alice_group.process_incoming_message(commit.commit_message)?;
+
+        let bob_group = bob
+            .join_group(None, &commit.welcome_message.unwrap())?
+            .group;
+        Ok((
+            alice_group,
+            arc_unwrap_or_clone(bob_group) 
+        ))
     }
 
     #[derive(Debug, Default)]
