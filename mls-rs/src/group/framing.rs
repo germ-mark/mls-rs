@@ -564,6 +564,31 @@ impl MlsMessage {
             _ => Err(MlsError::UnexpectedMessageType)
         }
     }
+
+    pub fn extract_stapled_proposal(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
+        let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
+            .into_ciphertext();
+
+        let Some(ciphertext) = ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+
+        if ciphertext.authenticated_data.is_empty() { 
+            return Ok(None)
+        }
+
+        let inner_message = MlsMessage::from_bytes( ciphertext.authenticated_data.as_slice() )?;
+        let inner_ciphertext_maybe = inner_message.clone()
+            .into_ciphertext();
+        let Some(inner_ciphertext) = inner_ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+
+        match inner_ciphertext.content_type {
+            ContentType::Proposal => return Ok(Some(inner_message)),
+            _ => Err(MlsError::UnexpectedMessageType)
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
