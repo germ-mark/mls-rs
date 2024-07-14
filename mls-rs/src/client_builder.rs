@@ -818,7 +818,7 @@ impl Default for Settings {
         let extension_types = vec![ExtensionType::LEAF_NODE_EPOCH];
 
         Self {
-            extension_types: extension_types,
+            extension_types,
             protocol_versions: Default::default(),
             lifetime_in_s: 365 * 24 * 3600,
             custom_proposal_types: Default::default(),
