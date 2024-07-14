@@ -13,13 +13,16 @@ use crate::{
     tree_kem::TreeKemPrivate,
 };
 
+#[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
+use crate::group::PendingUpdate;
+
 #[cfg(feature = "by_ref_proposal")]
 use crate::{
-    crypto::{HpkePublicKey, HpkeSecretKey},
+    crypto::{HpkePublicKey},
     group::{
         message_hash::MessageHash,
         proposal_cache::{CachedProposal, ProposalCache},
-        ProposalMessageDescription, ProposalRef, PendingUpdate
+        ProposalMessageDescription, ProposalRef
     },
     map::SmallMap,
 };
