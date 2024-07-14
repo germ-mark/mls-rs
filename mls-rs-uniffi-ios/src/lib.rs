@@ -223,6 +223,13 @@ impl From<mls_rs::group::proposal::Proposal> for Proposal {
     }
 }
 
+#[uniffi::export]
+impl Proposal {
+    fn proposal_type(&self) -> u16 {
+        self._inner.proposal_type().raw_value()
+    }
+}
+
 /// Update of a member due to a commit.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct MemberUpdate {
@@ -559,8 +566,9 @@ pub struct CommitOutput {
     /// A group info that can be provided to new members in order to
     /// enable external commit functionality.
     pub group_info: Option<Arc<Message>>,
-    // TODO(mgeisler): decide if we should expose unused_proposals()
-    // as well.
+    
+    /// Proposals that were received in the prior epoch but not included in the following commit.
+    pub unused_proposals: Vec<Arc<Proposal>>,
 }
 
 impl TryFrom<mls_rs::group::CommitOutput> for CommitOutput {
@@ -580,12 +588,18 @@ impl TryFrom<mls_rs::group::CommitOutput> for CommitOutput {
         let group_info = commit_output
             .external_commit_group_info
             .map(|group_info| Arc::new(group_info.into()));
+        let unused_proposals = commit_output
+            .unused_proposals
+            .into_iter()
+            .map(|proposal_info| Arc::new(proposal_info.proposal.into() ) )
+            .collect();
 
         Ok(Self {
             commit_message,
             welcome_message,
             ratchet_tree,
             group_info,
+            unused_proposals
         })
     }
 }
@@ -1170,11 +1184,12 @@ mod tests {
         let update = bob_group.propose_update( vec![] )?;
         let _ = bob_group.process_incoming_message(update.clone().into())?;
 
-        let commit_message = bob_group.commit()?.commit_message;
-        let _ = bob_group.process_incoming_message(commit_message.clone());
+        let commit_output = bob_group.commit()?;
+        println!("commit_output unused {:?}", commit_output.unused_proposals);
+        let _ = bob_group.process_incoming_message(commit_output.commit_message.clone());
         let next_message = bob_group.encrypt_application_message(
             b"hello, alice",
-            commit_message.to_bytes()?
+            commit_output.commit_message.to_bytes()?
         )?;
 
         let extracted_commit_maybe = extract_stapled_commit(next_message.to_bytes()?)?;
@@ -1191,6 +1206,18 @@ mod tests {
 
         assert_eq!(next_data, b"hello, alice");
 
+        //test multiple updates
+        let first_update = alice_group.propose_update( vec![] )?;
+        let second_update = alice_group.propose_update( vec![] )?;
+
+        let _ = bob_group.process_incoming_message(first_update.into())?;
+        let _ = bob_group.process_incoming_message(second_update.into())?;
+
+        let commit_message = bob_group.commit()?.commit_message;
+        let _ = bob_group.process_incoming_message(commit_message.clone())?;
+
+        let result = alice_group.process_incoming_message(commit_message)?;
+        
         Ok(())
     }
 
