@@ -2230,6 +2230,17 @@ mod tests {
         let mut extension_list = ExtensionList::default();
         extension_list.set_from(new_extension).unwrap();
 
+        // If we don't push here, then we get "no need to be `mut`" warnings when replace_proposal
+        // isn't enabled.
+        let extensions: Vec<ExtensionType> = vec![42.into()];
+
+        #[cfg(feature = "replace_proposal")]
+        {
+            let epoch_extension = LeafNodeEpochExt::new(0);
+            extension_list.set_from(epoch_extension).unwrap();
+            extensions.push(ExtensionType::LEAF_NODE_EPOCH);
+        }
+
         let mut test_group = test_group_custom(
             TEST_PROTOCOL_VERSION,
             TEST_CIPHER_SUITE,
