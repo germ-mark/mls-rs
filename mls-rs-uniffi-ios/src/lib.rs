@@ -1029,19 +1029,17 @@ impl Group {
 }
 
 #[uniffi::export]
-//to let us staple a commit to a message from the next epoch, we tuck the commit into the message's authenticated data
-pub fn extract_stapled_commit(
-    message_data: Vec<u8>
-) -> Result<Option<Arc<Message>>, MlSrsError> {
-    Ok(mls_rs::MlsMessage::extract_stapled_commit(message_data)?
-        .map(|message| Arc::new(message.into())))
-}
-
-#[uniffi::export]
-pub fn extract_stapled_update_commit(
+//simple unchecked extraction of an inner auth_data
+pub fn extract_unchecked_authdata(
+    expected_outer_type: u8,
+    expected_inner_type: u8,
     message_data: Vec<u8>
 ) -> Result<Message, MlSrsError> {
-    let message = mls_rs::MlsMessage::extract_stapled_update_commit(message_data)?;
+    let message = mls_rs::MlsMessage::unchecked_auth_data(
+        expected_outer_type,
+        expected_inner_type,
+        message_data
+    )?;
     Ok(message.into())
 }
 
@@ -1104,12 +1102,13 @@ mod tests {
             commit_output.commit_message.to_bytes()?
         )?;
 
-        let extracted_commit_maybe = extract_stapled_commit(next_message.to_bytes()?)?;
-        let Some(extracted_commit) = extracted_commit_maybe else {
-            panic!("Missing stapled commit")
-        };
+        let extracted_commit = extract_unchecked_authdata(
+            mls_rs::group::ContentType::Application as u8,
+            mls_rs::group::ContentType::Commit as u8,
+            next_message.to_bytes()?
+        )?;
 
-        let _ = alice_group.process_incoming_message(extracted_commit);
+        let _ = alice_group.process_incoming_message(extracted_commit.into());
         let received = alice_group.process_incoming_message(Arc::new(next_message))?;
 
         let ReceivedMessage::ApplicationMessage { sender: _, data: next_data, authenticated_data: _ } = received else {
@@ -1122,8 +1121,6 @@ mod tests {
         let first_update = alice_group.propose_update( None, None,vec![] )?;
         let second_update = alice_group.propose_update( None, None,vec![] )?;
 
-        let extracted = extract_stapled_commit(first_update.to_bytes()?)?;
-        assert!(extracted.is_none());
 
         let _ = bob_group.process_incoming_message(first_update.into())?;
         assert!(!bob_group.proposal_cache_is_empty());
@@ -1159,7 +1156,11 @@ mod tests {
              update.inner.to_bytes()?
         )?;
 
-        let _ = extract_stapled_update_commit(message.to_bytes()?);
+        let inner_combined = extract_unchecked_authdata(
+            mls_rs::group::ContentType::Application as u8,
+            mls_rs::group::ContentType::Proposal as u8,
+            message.to_bytes()?
+        );
 
         Ok(())
     }
