@@ -980,7 +980,7 @@ where
     /// caller should have authenticated this leafNode with the AS
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
-    pub async fn propose_replace_from_update(
+    pub async fn propose_replace_from_update_message(
         &mut self,
         to_replace: u32,
         proposal: Proposal,
@@ -995,6 +995,26 @@ where
             update_proposal.leaf_node
         ).await?;
         self.proposal_message(proposal, authenticated_data).await
+    }
+
+
+    #[cfg(feature = "replace_proposal")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn propose_replace_from_update(
+        &mut self,
+        to_replace: u32,
+        proposal: Proposal,
+    ) -> Result<Proposal, MlsError> {
+        let crate::group::Proposal::Update(update_proposal) = proposal else {
+            return Err(MlsError::UnexpectedMessageType);
+        };
+
+        Ok (
+            self.replace_proposal(
+                to_replace,
+                update_proposal.leaf_node
+            ).await?
+        )
     }
 
     #[cfg(feature = "replace_proposal")]
