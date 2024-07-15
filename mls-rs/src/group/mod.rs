@@ -2235,6 +2235,9 @@ mod tests {
         let extensions: Vec<ExtensionType> = vec![42.into()];
 
         #[cfg(feature = "replace_proposal")]
+        let mut extensions = extensions;
+
+        #[cfg(feature = "replace_proposal")]
         {
             let epoch_extension = LeafNodeEpochExt::new(0);
             extension_list.set_from(epoch_extension).unwrap();
