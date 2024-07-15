@@ -549,6 +549,7 @@ impl MlsMessage {
         Some(ciphertext.content_type as u8)
     }
 
+    //extracts a nested [Message ad:[Commit]] so that we can staple a commit to subsequent messages
     pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
         let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
             .into_ciphertext();
@@ -570,6 +571,45 @@ impl MlsMessage {
 
         match inner_ciphertext.content_type {
             ContentType::Commit => return Ok(Some(inner_message)),
+            _ => Err(MlsError::UnexpectedMessageType)
+        }
+    }
+
+    //extracts a nested [Message ad[Update ad:[Commit]] so that we can staple
+    //a commit, (and a subsequent) update to messages in that epoch
+    //extracts a 
+    pub fn extract_stapled_update_commit(
+        message_data: Vec<u8>
+        ) -> Result<(MlsMessage, MlsMessage), MlsError> {
+        let outer_ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
+            .into_ciphertext();
+
+        let Some(outer_ciphertext) = outer_ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+        if outer_ciphertext.content_type != ContentType::Application { 
+            return Err(MlsError::UnexpectedMessageType)
+        }
+
+        //middle
+        let middle_message = MlsMessage::from_bytes( outer_ciphertext.authenticated_data.as_slice() )?;
+        let middle_ciphertext_maybe = middle_message.clone().into_ciphertext();
+        let Some(middle_ciphertext) = middle_ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+        if middle_ciphertext.content_type != ContentType::Proposal { 
+            return Err(MlsError::UnexpectedMessageType)
+        }
+
+        //final
+        let final_message = MlsMessage::from_bytes( middle_ciphertext.authenticated_data.as_slice() )?;
+        let final_ciphertext_maybe = final_message.clone().into_ciphertext();
+        let Some(final_ciphertext) = final_ciphertext_maybe else {
+            return Err(MlsError::UnexpectedMessageType)
+        };
+
+        match final_ciphertext.content_type {
+            ContentType::Commit => return Ok((middle_message, final_message)),
             _ => Err(MlsError::UnexpectedMessageType)
         }
     }

@@ -1030,9 +1030,21 @@ impl Group {
 
 #[uniffi::export]
 //to let us staple a commit to a message from the next epoch, we tuck the commit into the message's authenticated data
-pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<Arc<Message>>, MlSrsError> {
+pub fn extract_stapled_commit(
+    message_data: Vec<u8>
+) -> Result<Option<Arc<Message>>, MlSrsError> {
     Ok(mls_rs::MlsMessage::extract_stapled_commit(message_data)?
         .map(|message| Arc::new(message.into())))
+}
+
+pub fn extract_stapled_update_commit(
+    message_data: Vec<u8>
+) -> Result<(Arc<Message>, Arc<Message>), MlsError> {
+    let (first, second) = mls_rs::MlsMessage::extract_stapled_update_commit(message_data)?;
+    Ok( 
+        (Arc::new(first.into()),
+        Arc::new(second.into()),)
+    )
 }
 
 #[cfg(test)]
@@ -1127,6 +1139,30 @@ mod tests {
 
         let result = alice_group.process_incoming_message(commit_output.commit_message)?;
         
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(mls_build_async))]
+    fn test_stapled_commit() -> Result<(), MlSrsError> {
+        let (alice_group, bob_group) = setup_test()?;
+
+        //empty commit
+        let commit_output = alice_group.commit()?;
+        let _ = alice_group.process_incoming_message(commit_output.clone().commit_message)?;
+        let update = alice_group.propose_update(
+            None,
+            None,
+            commit_output.commit_message.to_bytes()?
+        )?;
+        alice_group.clear_proposal_cache();
+        let message = alice_group.encrypt_application_message(
+             b"hello, bob",
+             update.inner.to_bytes()?
+        )?;
+
+        let _ = extract_stapled_update_commit(message.to_bytes()?);
+
         Ok(())
     }
 
