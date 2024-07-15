@@ -38,6 +38,7 @@ use mls_rs_core::identity;
 use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 //use mls_rs_crypto_openssl::OpensslCryptoProvider;
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
+use mls_rs::mls_rs_codec::MlsDecode;
 
 uniffi::setup_scaffolding!();
 
@@ -970,7 +971,7 @@ impl Group {
         proposal: Arc<Proposal>,
         authenticated_data: Vec<u8>
     ) -> Result<Arc<Message>, MlSrsError> {
-        let message = self.inner().await.propose_replace_from_update(
+        let message = self.inner().await.propose_replace_from_update_message(
             to_replace,
             arc_unwrap_or_clone(proposal)._inner,
             authenticated_data
@@ -978,43 +979,53 @@ impl Group {
         Ok(Arc::new(message.into()))
     }
 
+    pub async fn commit_selected_proposals(
+        &self,
+        proposals_archives: Vec<ReceivedUpdate>,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<Arc<SigningIdentity>>,
+        authenticated_data: Vec<u8>
+    ) -> Result<CommitOutput, MlSrsError> {
+        let mut group = self.inner().await;
 
-    // pub async fn commit_selected_proposals(
-    //     &self,
-    //     proposals_archives: Vec<ReceivedUpdate>,
-    //     my_update: Option<Arc<ProposalFfi>> // output of propose_update_with_identity
-    // ) -> Result<CommitOutput, MlSrsError> {
-    //     let mut group = self.inner().await;
+        let updates: Result<Vec<mls_rs::group::proposal::Proposal>, MlsError> = proposals_archives
+            .iter().map( |received_update| {
+                let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
+                    &mut received_update.encoded_update.as_slice()
+                );
+                if received_update.epoch == group.current_epoch() {
+                    Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
+                } else {
+                    return group.propose_replace_from_update(
+                        received_update.leaf_index,
+                        mls_rs::group::proposal::Proposal::Update(update_proposal?),
+                    );
+                }
+            })
+            .collect();
 
-    //     let updates: Result<Vec<mls_rs::group::proposal::Proposal>, MlsError> = proposals_archives
-    //         .iter().map( |received_update| {
-    //             let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
-    //                 &mut received_update.encoded_update.as_slice()
-    //             );
-    //             if received_update.epoch == group.current_epoch() {
-    //                 Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
-    //             } else {
-    //                 return group.replace_proposal_variant(
-    //                     received_update.leaf_index,
-    //                     update_proposal?
-    //                 );
-    //             }
-    //         })
-    //         .collect();
+        let builder = group.commit_builder()
+                .raw_proposals(updates?)
+                .authenticated_data(authenticated_data);
 
-    //     let builder = group.commit_builder()
-    //         .raw_proposals(updates?);
-
-    //     if let Some(my_update_val) = my_update {
-    //         builder.raw_proposal(my_update_val._inner.clone())
-    //             .build().await?
-    //             .try_into()
-    //     } else {
-    //         builder
-    //             .build().await?
-    //             .try_into()
-    //     }
-    // }
+        match (signer, signing_identity) {
+            (Some(signer), Some(signing_identity)) => {
+                builder
+                    .set_new_signing_identity(
+                        signer.into(),
+                        arc_unwrap_or_clone(signing_identity).inner
+                    )
+                    .build().await?
+                    .try_into()
+            },
+            (None, None) => {
+                builder
+                    .build().await?
+                    .try_into()
+            },
+            _ => Err(MlSrsError::InconsistentOptionalParameters)
+        } 
+    }
 }
 
 #[uniffi::export]
