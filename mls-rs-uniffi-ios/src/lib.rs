@@ -1037,14 +1037,12 @@ pub fn extract_stapled_commit(
         .map(|message| Arc::new(message.into())))
 }
 
+#[uniffi::export]
 pub fn extract_stapled_update_commit(
     message_data: Vec<u8>
-) -> Result<(Arc<Message>, Arc<Message>), MlsError> {
-    let (first, second) = mls_rs::MlsMessage::extract_stapled_update_commit(message_data)?;
-    Ok( 
-        (Arc::new(first.into()),
-        Arc::new(second.into()),)
-    )
+) -> Result<Message, MlSrsError> {
+    let message = mls_rs::MlsMessage::extract_stapled_update_commit(message_data)?;
+    Ok(message.into())
 }
 
 #[cfg(test)]

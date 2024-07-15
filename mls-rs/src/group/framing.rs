@@ -577,10 +577,10 @@ impl MlsMessage {
 
     //extracts a nested [Message ad[Update ad:[Commit]] so that we can staple
     //a commit, (and a subsequent) update to messages in that epoch
-    //extracts a 
+    //We only need the commit so we can process subsequent messages
     pub fn extract_stapled_update_commit(
         message_data: Vec<u8>
-        ) -> Result<(MlsMessage, MlsMessage), MlsError> {
+        ) -> Result<MlsMessage, MlsError> {
         let outer_ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
             .into_ciphertext();
 
@@ -609,7 +609,7 @@ impl MlsMessage {
         };
 
         match final_ciphertext.content_type {
-            ContentType::Commit => return Ok((middle_message, final_message)),
+            ContentType::Commit => return Ok(final_message),
             _ => Err(MlsError::UnexpectedMessageType)
         }
     }
