@@ -1033,14 +1033,14 @@ impl Group {
 pub fn extract_unchecked_authdata(
     expected_outer_type: u8,
     expected_inner_type: u8,
-    message_data: Vec<u8>
+    message: Arc<Message>,
 ) -> Result<Message, MlSrsError> {
-    let message = mls_rs::MlsMessage::unchecked_auth_data(
+    let extracted = mls_rs::MlsMessage::unchecked_auth_data(
         expected_outer_type,
         expected_inner_type,
-        message_data
+        message.inner.clone()
     )?;
-    Ok(message.into())
+    Ok(extracted.into())
 }
 
 #[cfg(test)]
@@ -1105,7 +1105,7 @@ mod tests {
         let extracted_commit = extract_unchecked_authdata(
             mls_rs::group::ContentType::Application as u8,
             mls_rs::group::ContentType::Commit as u8,
-            next_message.to_bytes()?
+            Arc::new(next_message.clone())
         )?;
 
         let _ = alice_group.process_incoming_message(extracted_commit.into());
@@ -1159,7 +1159,7 @@ mod tests {
         let inner_combined = extract_unchecked_authdata(
             mls_rs::group::ContentType::Application as u8,
             mls_rs::group::ContentType::Proposal as u8,
-            message.to_bytes()?
+            Arc::new(message)
         );
 
         Ok(())

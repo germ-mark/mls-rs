@@ -552,10 +552,9 @@ impl MlsMessage {
     pub fn unchecked_auth_data(
         expected_outer_type: u8,
         expected_inner_type: u8,
-        message_data: Vec<u8>
+        message: MlsMessage
     ) -> Result<MlsMessage, MlsError>{
-        let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
-            .into_ciphertext();
+        let ciphertext_maybe = message.into_ciphertext();
 
         let Some(ciphertext) = ciphertext_maybe else {
             return Err(MlsError::UnexpectedMessageType)
