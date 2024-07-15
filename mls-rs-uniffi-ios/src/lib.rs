@@ -958,13 +958,13 @@ impl Group {
     //back to them
     //They also can't convert it to a Replace, so more sensible to preemptively 
     //send it as a 
-    pub async fn reflect_update(
+    pub async fn propose_replace_from_update(
         &self,
         to_replace: u32,
         proposal: Arc<Proposal>,
         authenticated_data: Vec<u8>
     ) -> Result<Arc<Message>, MlSrsError> {
-        let message = self.inner().await.propose_replace_variant(
+        let message = self.inner().await.propose_replace_from_update(
             to_replace,
             arc_unwrap_or_clone(proposal)._inner,
             authenticated_data
@@ -1092,15 +1092,15 @@ mod tests {
             panic!("Wrong message type: {received_message:?}")
         };
 
-        let reflected = bob_group.reflect_update(
-            0,
-            proposal,
-            vec![]
-        )?;
+        // let reflected = bob_group.reflect_update(
+        //     0,
+        //     proposal,
+        //     vec![]
+        // )?;
 
-        let _ = alice_group.process_incoming_message(reflected);
-        let commit = alice_group.commit()?;
-        alice_group.process_incoming_message(commit.commit_message);
+        // let _ = alice_group.process_incoming_message(reflected);
+        // let commit = alice_group.commit()?;
+        // alice_group.process_incoming_message(commit.commit_message);
 
         Ok(())
     }

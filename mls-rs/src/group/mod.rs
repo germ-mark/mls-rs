@@ -980,7 +980,7 @@ where
     /// caller should have authenticated this leafNode with the AS
     #[cfg(feature = "replace_proposal")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
-    pub async fn propose_replace_variant(
+    pub async fn propose_replace_from_update(
         &mut self,
         to_replace: u32,
         proposal: Proposal,
