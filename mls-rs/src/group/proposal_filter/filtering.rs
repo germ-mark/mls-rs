@@ -6,7 +6,7 @@ use crate::{
     client::MlsError,
     group::{
         proposal::ReInitProposal,
-        proposal_filter::{ProposalBundle, ProposalInfo},
+        proposal_filter::{ProposalBundle, ProposalInfo, ProposalSource},
         AddProposal, ProposalType, RemoveProposal, Sender, UpdateProposal,
     },
     iter::wrap_iter,
@@ -16,15 +16,14 @@ use crate::{
     tree_kem::{
         leaf_node_validator::{LeafNodeValidator, ValidationContext},
         node::LeafIndex,
-        TreeKemPublic,
     },
     CipherSuiteProvider, ExtensionList,
 };
 
-use super::{
-    filtering_common::{filter_out_invalid_psks, ApplyProposalsOutput, ProposalApplier},
-    ProposalSource,
-};
+#[cfg(feature = "custom_proposal")]
+use crate::tree_kem::TreeKemPublic;
+
+use super::filtering_common::{filter_out_invalid_psks, ApplyProposalsOutput, ProposalApplier};
 
 #[cfg(feature = "by_ref_proposal")]
 use crate::extension::ExternalSendersExt;

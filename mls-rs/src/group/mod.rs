@@ -39,7 +39,10 @@ use crate::{CipherSuiteProvider, CryptoProvider};
 pub use state::GroupState;
 
 #[cfg(feature = "by_ref_proposal")]
-use crate::crypto::{HpkePublicKey, HpkeSecretKey};
+use crate::{
+    crypto::{HpkePublicKey, HpkeSecretKey},
+    map::SmallMap,
+};
 
 #[cfg(feature = "replace_proposal")]
 use crate::extension::LeafNodeEpochExt;
@@ -253,9 +256,9 @@ impl NewMemberInfo {
     }
 }
 
-#[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
-#[derive(Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
+#[cfg(feature = "by_ref_proposal")]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
 struct PendingUpdate {
     secret_key: HpkeSecretKey,
     signer: Option<SignatureSecretKey>,
@@ -284,10 +287,8 @@ where
     epoch_secrets: EpochSecrets,
     private_tree: TreeKemPrivate,
     key_schedule: KeySchedule,
-
     #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
     pending_updates: crate::map::SmallMap<HpkePublicKey, PendingUpdate>, // Hash of leaf node hpke public key to secret key
-
     pending_commit: Option<CommitGeneration>,
     #[cfg(feature = "psk")]
     previous_psk: Option<PskSecretInput>,
@@ -714,10 +715,10 @@ where
         // Apply own update or a Replace proposal replacing us
         let new_signer = None;
 
-        #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
+        #[cfg(feature = "by_ref_proposal")]
         let mut new_signer = new_signer;
 
-        #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
+        #[cfg(feature = "by_ref_proposal")]
         {
             let updated_leaves = core::iter::empty();
 
@@ -745,21 +746,6 @@ where
             let mut updated_leaves = updated_leaves;
             let self_update = updated_leaves.next();
 
-// <<<<<<< HEAD
-//         if let Some(leaf_pk) = self_update {
-//             // Update the leaf in the private tree if this is our update
-//             #[cfg(feature = "std")]
-//             let pending_update = self.pending_updates.get(&leaf_pk);
-
-//             #[cfg(not(feature = "std"))]
-//             let new_leaf_sk_and_signer = self
-//                 .pending_updates
-//                 .iter()
-//                 .find_map(|(pk, sk)| (pk == leaf_pk).then_some(sk));
-
-//             let new_leaf_sk = pending_update.map(|upd| upd.secret_key.clone());
-//             new_signer = pending_update.and_then(|upd| upd.signer.clone());
-// =======
             if updated_leaves.count() > 0 {
                 // XXX(RLB) This error code is wrong; might need a new value?  Or just not bother
                 // checking, assuming checks have been done upstream?  But then we might also need a
@@ -784,7 +770,6 @@ where
 
                 let new_leaf_sk = pending_update.map(|upd| upd.secret_key.clone());
                 new_signer = pending_update.and_then(|upd| upd.signer.clone());
-// >>>>>>> 890945f (Clear errors building without default features)
 
                 provisional_private_tree
                     .update_leaf(new_leaf_sk.ok_or(MlsError::UpdateErrorNoSecretKey)?);
@@ -924,11 +909,37 @@ where
         signing_identity: Option<SigningIdentity>,
         leaf_node_extensions: Option<ExtensionList>,
     ) -> Result<Proposal, MlsError> {
-        let leaf_node = self.updated_leaf_node(
-            signer,
-            signing_identity,
-            leaf_node_extensions)
-        .await?;
+        // Grab a copy of the current node and update it to have new key material
+        let mut leaf_node = self.current_user_leaf_node()?.clone();
+        let new_leaf_node_extensions =
+            leaf_node_extensions.unwrap_or(leaf_node.ungreased_extensions());
+        let properties = self.config.leaf_properties(new_leaf_node_extensions);
+
+        #[cfg(feature = "replace_proposal")]
+        let mut properties = properties;
+
+        #[cfg(feature = "replace_proposal")]
+        properties
+            .extensions
+            .set_from(LeafNodeEpochExt::new(self.current_epoch()))?;
+
+        let secret_key = leaf_node
+            .update(
+                &self.cipher_suite_provider,
+                self.group_id(),
+                self.current_member_index(),
+                Some(properties),
+                signing_identity,
+                signer.as_ref().unwrap_or(&self.signer),
+            )
+            .await?;
+
+        let pending_update = PendingUpdate { secret_key, signer };
+
+        // Store the secret key in the pending updates storage for later
+        self.pending_updates
+            .insert(leaf_node.public_key.clone(), pending_update);
+
         Ok(Proposal::Update(UpdateProposal { leaf_node }))
     }
 
@@ -975,55 +986,6 @@ where
             self.pending_updates
                 .retain(|(pk, _upd)| *pk != leaf_node.public_key);
         }
-    }
-
-    /// Create a fresh LeafNode that can be used to update this member's leaf.
-    #[cfg(any(feature = "by_ref_proposal", feature = "replace_proposal"))]
-    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
-    async fn updated_leaf_node(
-        &mut self,
-        signer: Option<SignatureSecretKey>,
-        signing_identity: Option<SigningIdentity>,
-        leaf_node_extensions: Option<ExtensionList>,
-    ) -> Result<LeafNode, MlsError> {
-        // Grab a copy of the current node and update it to have new key material
-
-        let mut new_leaf_node: LeafNode = self.current_user_leaf_node()?.clone();
-        let new_leaf_node_extensions =
-            leaf_node_extensions.unwrap_or(new_leaf_node.ungreased_extensions());
-        let properties = self.config.leaf_properties(new_leaf_node_extensions);
-
-        #[cfg(feature = "replace_proposal")]
-        let mut properties = properties;
-
-        #[cfg(feature = "replace_proposal")]
-        properties
-            .extensions
-            .set(LeafNodeEpochExt::new(self.current_epoch()).into_extension()?);
-
-        let secret_key = new_leaf_node
-            .update(
-                &self.cipher_suite_provider,
-                self.group_id(),
-                self.current_member_index(),
-                Some(properties),
-                signing_identity,
-                signer.as_ref().unwrap_or(&self.signer),
-            )
-            .await?;
-
-        let pending_update = PendingUpdate { secret_key, signer };
-
-        // Store the secret key in the pending updates storage for later
-        #[cfg(feature = "std")]
-        self.pending_updates
-            .insert(new_leaf_node.public_key.clone(), pending_update);
-
-        #[cfg(not(feature = "std"))]
-        self.pending_updates
-            .push((new_leaf_node.public_key.clone(), pending_update));
-
-        Ok(new_leaf_node)
     }
 
     /// Create a proposal message that removes an existing member from the
