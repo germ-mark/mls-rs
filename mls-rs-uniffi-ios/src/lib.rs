@@ -76,7 +76,9 @@ pub enum MlSrsError {
         inner: uniffi::UnexpectedUniFFICallbackError,
     },
     #[error("Unexpected message format")]
-    UnexpecteMessageFormat
+    UnexpecteMessageFormat,
+    #[error("Inconsistent Optional Parameters")]
+    InconsistentOptionalParameters
 }
 
 impl IntoAnyError for MlSrsError {}
@@ -632,6 +634,18 @@ impl From<identity::SigningIdentity> for SigningIdentity {
 #[cfg_attr(mls_build_async, maybe_async::must_be_async)]
 #[uniffi::export]
 impl SigningIdentity {
+    #[uniffi::constructor]
+    pub fn new(
+        signature_key_data: Vec<u8>,
+        basic_credential: Vec<u8>,
+    ) -> Result<Self, MlSrsError> {
+        let signing_identity = identity::SigningIdentity::new(
+            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
+            signature_key_data.into(),
+        );
+        Ok( signing_identity.into() )
+    }
+
     pub fn basic_credential(&self) -> Option<Vec<u8>> {
         match self.clone().inner.credential {
             mls_rs::identity::Credential::Basic(basic_credential) => Some(basic_credential.identifier),
@@ -912,32 +926,28 @@ impl Group {
     }
 
     //for proposing in my own group
-    pub async fn propose_update_with_identity (
-        &self,
-        signer: SignatureSecretKey,
-        signature_key_data: Vec<u8>,
-        basic_credential: Vec<u8>,
-        authenticated_data: Vec<u8>
-    ) -> Result<Message, MlSrsError> {
-        let signing_identity = identity::SigningIdentity::new(
-            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
-            signature_key_data.into(),
-        );
-        let mut group = self.inner().await;
-
-        let message = group.propose_update_with_identity(signer.into(), signing_identity, authenticated_data);
-        Ok(message?.into())
-    }
-
-    //just a new leaf node
     pub async fn propose_update (
         &self,
+        signer: Option<SignatureSecretKey>,
+        signing_identity: Option<Arc<SigningIdentity>>,
         authenticated_data: Vec<u8>
     ) -> Result<Message, MlSrsError> {
         let mut group = self.inner().await;
 
-        let message = group.propose_update(authenticated_data);
-         Ok(message?.into())
+        match (signer, signing_identity) {
+            (Some(signer), Some(signing_identity)) => {
+                let message = group.propose_update_with_identity(
+                    signer.into(),
+                    arc_unwrap_or_clone(signing_identity).inner,
+                    authenticated_data
+                );
+                Ok(message?.into())
+            },
+            (None, None) => {
+                Ok(group.propose_update(authenticated_data)?.into())
+            },
+            _ => Err(MlSrsError::InconsistentOptionalParameters)
+        }
     }
 
     pub async fn clear_proposal_cache(&self) {
@@ -953,11 +963,7 @@ impl Group {
             .map(|message| message.into())
     }
 
-    //reflect a proposal 
-    //Committers can't commit their own update, so another member has to reflect it
-    //back to them
-    //They also can't convert it to a Replace, so more sensible to preemptively 
-    //send it as a 
+    //Propose replace from update
     pub async fn propose_replace_from_update(
         &self,
         to_replace: u32,
@@ -971,6 +977,44 @@ impl Group {
         )?;
         Ok(Arc::new(message.into()))
     }
+
+
+    // pub async fn commit_selected_proposals(
+    //     &self,
+    //     proposals_archives: Vec<ReceivedUpdate>,
+    //     my_update: Option<Arc<ProposalFfi>> // output of propose_update_with_identity
+    // ) -> Result<CommitOutput, MlSrsError> {
+    //     let mut group = self.inner().await;
+
+    //     let updates: Result<Vec<mls_rs::group::proposal::Proposal>, MlsError> = proposals_archives
+    //         .iter().map( |received_update| {
+    //             let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
+    //                 &mut received_update.encoded_update.as_slice()
+    //             );
+    //             if received_update.epoch == group.current_epoch() {
+    //                 Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
+    //             } else {
+    //                 return group.replace_proposal_variant(
+    //                     received_update.leaf_index,
+    //                     update_proposal?
+    //                 );
+    //             }
+    //         })
+    //         .collect();
+
+    //     let builder = group.commit_builder()
+    //         .raw_proposals(updates?);
+
+    //     if let Some(my_update_val) = my_update {
+    //         builder.raw_proposal(my_update_val._inner.clone())
+    //             .build().await?
+    //             .try_into()
+    //     } else {
+    //         builder
+    //             .build().await?
+    //             .try_into()
+    //     }
+    // }
 }
 
 #[uniffi::export]
@@ -1028,7 +1072,7 @@ mod tests {
         assert_eq!(data, b"hello, bob");
 
         //adding on additional germ steps here 
-        let update = bob_group.propose_update( vec![] )?;
+        let update = bob_group.propose_update( None, None,vec![] )?;
         let _ = bob_group.process_incoming_message(update.clone().into())?;
 
         let commit_output = bob_group.commit()?;
@@ -1054,8 +1098,8 @@ mod tests {
         assert_eq!(next_data, b"hello, alice");
 
         //test multiple updates
-        let first_update = alice_group.propose_update( vec![] )?;
-        let second_update = alice_group.propose_update( vec![] )?;
+        let first_update = alice_group.propose_update( None, None,vec![] )?;
+        let second_update = alice_group.propose_update( None, None,vec![] )?;
 
         let extracted = extract_stapled_commit(first_update.to_bytes()?)?;
         assert!(extracted.is_none());
@@ -1080,7 +1124,7 @@ mod tests {
     fn test_update_reflect() -> Result<(), MlSrsError> {
         let (alice_group, bob_group) = setup_test()?;
 
-        let alice_update = alice_group.propose_update( vec![] )?;
+        let alice_update = alice_group.propose_update( None, None,vec![] )?;
         alice_group.clear_proposal_cache();
 
         let received_message = bob_group.process_incoming_message(Arc::new(alice_update))?;
