@@ -653,6 +653,10 @@ impl SigningIdentity {
             _ => None
         }
     }
+
+    pub fn node_signing_key(&self) -> SignaturePublicKey {
+        self.inner.signature_key.clone().into()
+    }
 }
 
 /// An MLS end-to-end encrypted group.
