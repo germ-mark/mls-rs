@@ -1026,6 +1026,24 @@ impl Group {
             _ => Err(MlSrsError::InconsistentOptionalParameters)
         } 
     }
+
+    pub async fn export_secret(
+        &self,
+        label: Vec<u8>,
+        context: Vec<u8>,
+        len: u64
+    ) -> Result<Vec<u8>, MlSrsError> {
+        let result =self.inner().await
+            .export_secret(
+                &label,
+                &context,
+                len as usize
+            )?
+            .as_bytes()
+            .to_vec();
+        Ok(result)
+    }
+
 }
 
 #[uniffi::export]
