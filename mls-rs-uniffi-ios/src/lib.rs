@@ -240,8 +240,13 @@ impl From<mls_rs::group::proposal::Proposal> for Proposal {
 
 #[uniffi::export]
 impl Proposal {
-    fn proposal_type(&self) -> u16 {
+    pub fn proposal_type(&self) -> u16 {
         self._inner.proposal_type().raw_value()
+    }
+
+    pub fn signing_identity(&self) -> Option<Arc<SigningIdentity>> {
+        self._inner.signing_identity()
+            .map(|s| Arc::new(s.into()))
     }
 }
 

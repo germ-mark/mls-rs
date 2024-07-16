@@ -477,6 +477,24 @@ impl Proposal {
             Proposal::Custom(c) => c.proposal_type,
         }
     }
+
+    pub fn signing_identity(&self) -> Option<SigningIdentity> {
+         match self {
+            Proposal::Add(p) => Some(p.signing_identity().clone()),
+            #[cfg(feature = "by_ref_proposal")]
+            Proposal::Update(p) => Some(p.signing_identity().clone()),
+            #[cfg(feature = "replace_proposal")]
+            Proposal::Replace(p) => Some(p.signing_identity().clone()),
+            Proposal::Remove(_) => None,
+            #[cfg(feature = "psk")]
+            Proposal::Psk(_) => None,
+            Proposal::ReInit(_) => None,
+            Proposal::ExternalInit(_) => None,
+            Proposal::GroupContextExtensions(_) => None,
+            #[cfg(feature = "custom_proposal")]
+            Proposal::Custom(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
