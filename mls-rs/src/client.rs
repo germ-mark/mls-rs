@@ -146,6 +146,8 @@ pub enum MlsError {
     PendingCommitNotFound,
     #[cfg_attr(feature = "std", error("unexpected message type for action"))]
     UnexpectedMessageType,
+    #[cfg_attr(feature = "std", error("Expected message type {0}, found message type {1}"))]
+    UnexpectedMessageTypeDetailed(u8, u8),
     #[cfg_attr(
         feature = "std",
         error("membership tag on MlsPlaintext for non-member sender")

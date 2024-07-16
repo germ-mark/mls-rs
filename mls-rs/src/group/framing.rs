@@ -549,69 +549,37 @@ impl MlsMessage {
         Some(ciphertext.content_type as u8)
     }
 
-    //extracts a nested [Message ad:[Commit]] so that we can staple a commit to subsequent messages
-    pub fn extract_stapled_commit(message_data: Vec<u8>) -> Result<Option<MlsMessage>, MlsError> {
-        let ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
-            .into_ciphertext();
+    pub fn unchecked_auth_data(
+        expected_outer_type: u8,
+        expected_inner_type: Option<u8>,
+        message: MlsMessage
+    ) -> Result<MlsMessage, MlsError>{
+        let ciphertext_maybe = message.into_ciphertext();
 
         let Some(ciphertext) = ciphertext_maybe else {
             return Err(MlsError::UnexpectedMessageType)
         };
-
-        if ciphertext.authenticated_data.is_empty() { 
-            return Ok(None)
+        if ciphertext.content_type as u8 != expected_outer_type {
+            return Err(MlsError::UnexpectedMessageTypeDetailed(
+                    expected_outer_type,
+                    ciphertext.content_type as u8
+                )
+            )
         }
 
         let inner_message = MlsMessage::from_bytes( ciphertext.authenticated_data.as_slice() )?;
-        let inner_ciphertext_maybe = inner_message.clone()
-            .into_ciphertext();
-        let Some(inner_ciphertext) = inner_ciphertext_maybe else {
-            return Err(MlsError::UnexpectedMessageType)
-        };
-
-        match inner_ciphertext.content_type {
-            ContentType::Commit => return Ok(Some(inner_message)),
-            _ => Err(MlsError::UnexpectedMessageType)
-        }
-    }
-
-    //extracts a nested [Message ad[Update ad:[Commit]] so that we can staple
-    //a commit, (and a subsequent) update to messages in that epoch
-    //We only need the commit so we can process subsequent messages
-    pub fn extract_stapled_update_commit(
-        message_data: Vec<u8>
-        ) -> Result<MlsMessage, MlsError> {
-        let outer_ciphertext_maybe = MlsMessage::from_bytes(message_data.as_slice())?
-            .into_ciphertext();
-
-        let Some(outer_ciphertext) = outer_ciphertext_maybe else {
-            return Err(MlsError::UnexpectedMessageType)
-        };
-        if outer_ciphertext.content_type != ContentType::Application { 
-            return Err(MlsError::UnexpectedMessageType)
+        let inner_content_type = inner_message.clone()
+            .into_ciphertext()
+            .map(|c| c.content_type as u8);
+        if inner_content_type != expected_inner_type {
+            return Err(MlsError::UnexpectedMessageTypeDetailed(
+                    expected_inner_type.unwrap_or(0),
+                    inner_content_type.unwrap_or(0)
+                )
+            );
         }
 
-        //middle
-        let middle_message = MlsMessage::from_bytes( outer_ciphertext.authenticated_data.as_slice() )?;
-        let middle_ciphertext_maybe = middle_message.clone().into_ciphertext();
-        let Some(middle_ciphertext) = middle_ciphertext_maybe else {
-            return Err(MlsError::UnexpectedMessageType)
-        };
-        if middle_ciphertext.content_type != ContentType::Proposal { 
-            return Err(MlsError::UnexpectedMessageType)
-        }
-
-        //final
-        let final_message = MlsMessage::from_bytes( middle_ciphertext.authenticated_data.as_slice() )?;
-        let final_ciphertext_maybe = final_message.clone().into_ciphertext();
-        let Some(final_ciphertext) = final_ciphertext_maybe else {
-            return Err(MlsError::UnexpectedMessageType)
-        };
-
-        match final_ciphertext.content_type {
-            ContentType::Commit => return Ok(final_message),
-            _ => Err(MlsError::UnexpectedMessageType)
-        }
+        Ok(inner_message)
     }
 }
 
