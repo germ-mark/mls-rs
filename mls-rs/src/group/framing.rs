@@ -551,7 +551,7 @@ impl MlsMessage {
 
     pub fn unchecked_auth_data(
         expected_outer_type: u8,
-        expected_inner_type: u8,
+        expected_inner_type: Option<u8>,
         message: MlsMessage
     ) -> Result<MlsMessage, MlsError>{
         let ciphertext_maybe = message.into_ciphertext();
@@ -561,24 +561,23 @@ impl MlsMessage {
         };
         if ciphertext.content_type as u8 != expected_outer_type {
             return Err(MlsError::UnexpectedMessageTypeDetailed(
-                expected_outer_type,
-                ciphertext.content_type as u8)
+                    expected_outer_type,
+                    ciphertext.content_type as u8
+                )
             )
         }
 
         let inner_message = MlsMessage::from_bytes( ciphertext.authenticated_data.as_slice() )?;
-        let inner_ciphertext_maybe = inner_message.clone()
-            .into_ciphertext();
-        let Some(inner_ciphertext) = inner_ciphertext_maybe else {
-            return Err(MlsError::UnexpectedMessageType)
-        };
-
-        if inner_ciphertext.content_type as u8 != expected_inner_type {
+        let inner_content_type = inner_message.clone()
+            .into_ciphertext()
+            .map(|c| c.content_type as u8);
+        if inner_content_type != expected_inner_type {
             return Err(MlsError::UnexpectedMessageTypeDetailed(
-                expected_inner_type,
-                inner_ciphertext.content_type as u8)
-            )
-        };
+                    expected_inner_type.unwrap_or(0),
+                    inner_content_type.unwrap_or(0)
+                )
+            );
+        }
 
         Ok(inner_message)
     }

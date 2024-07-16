@@ -1032,7 +1032,7 @@ impl Group {
 //simple unchecked extraction of an inner auth_data
 pub fn extract_unchecked_authdata(
     expected_outer_type: u8,
-    expected_inner_type: u8,
+    expected_inner_type: Option<u8>, //we're checking private message content_type and welcome doesn't have one
     message: Arc<Message>,
 ) -> Result<Message, MlSrsError> {
     let extracted = mls_rs::MlsMessage::unchecked_auth_data(
@@ -1104,7 +1104,7 @@ mod tests {
 
         let extracted_commit = extract_unchecked_authdata(
             mls_rs::group::ContentType::Application as u8,
-            mls_rs::group::ContentType::Commit as u8,
+            Some(mls_rs::group::ContentType::Commit as u8),
             Arc::new(next_message.clone())
         )?;
 
@@ -1158,7 +1158,7 @@ mod tests {
 
         let inner_combined = extract_unchecked_authdata(
             mls_rs::group::ContentType::Application as u8,
-            mls_rs::group::ContentType::Proposal as u8,
+            Some(mls_rs::group::ContentType::Proposal as u8),
             Arc::new(message)
         );
 
