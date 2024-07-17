@@ -241,10 +241,6 @@ impl From<mls_rs::group::proposal::Proposal> for Proposal {
 
 #[uniffi::export]
 impl Proposal {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, MlSrsError> {
-        Ok(self._inner.mls_encode_to_vec()?)
-    }
-
     pub fn proposal_type(&self) -> u16 {
         self._inner.proposal_type().raw_value()
     }
@@ -252,6 +248,17 @@ impl Proposal {
     pub fn signing_identity(&self) -> Option<Arc<SigningIdentity>> {
         self._inner.signing_identity()
             .map(|s| Arc::new(s.into()))
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, MlSrsError> {
+        Ok(self._inner.mls_encode_to_vec()?)
+    }
+
+    pub fn update_bytes(&self) -> Result<Option<Vec<u8>>, MlSrsError> {
+        match self._inner.clone() {
+            mls_rs::group::proposal::Proposal::Update(update) => Ok(Some(update.mls_encode_to_vec()?)),
+            _ => Ok(None)
+        }
     }
 }
 
