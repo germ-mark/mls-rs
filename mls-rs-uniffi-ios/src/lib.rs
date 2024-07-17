@@ -39,6 +39,7 @@ use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 //use mls_rs_crypto_openssl::OpensslCryptoProvider;
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
 use mls_rs::mls_rs_codec::MlsDecode;
+use mls_rs::mls_rs_codec::MlsEncode;
 
 uniffi::setup_scaffolding!();
 
@@ -240,6 +241,10 @@ impl From<mls_rs::group::proposal::Proposal> for Proposal {
 
 #[uniffi::export]
 impl Proposal {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, MlSrsError> {
+        Ok(self._inner.mls_encode_to_vec()?)
+    }
+
     pub fn proposal_type(&self) -> u16 {
         self._inner.proposal_type().raw_value()
     }
