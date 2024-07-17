@@ -1066,13 +1066,13 @@ pub fn extract_unchecked_authdata(
     expected_outer_type: u8,
     expected_inner_type: Option<u8>, //we're checking private message content_type and welcome doesn't have one
     message: Arc<Message>,
-) -> Result<Message, MlSrsError> {
+) -> Result<Option<Arc<Message>>, MlSrsError> {
     let extracted = mls_rs::MlsMessage::unchecked_auth_data(
         expected_outer_type,
         expected_inner_type,
         message.inner.clone()
     )?;
-    Ok(extracted.into())
+    Ok(extracted.map(|m| Arc::new(m.into()) ))
 }
 
 #[cfg(test)]
@@ -1134,11 +1134,15 @@ mod tests {
             commit_output.commit_message.to_bytes()?
         )?;
 
-        let extracted_commit = extract_unchecked_authdata(
+        let extracted_commit_maybe = extract_unchecked_authdata(
             mls_rs::group::ContentType::Application as u8,
             Some(mls_rs::group::ContentType::Commit as u8),
             Arc::new(next_message.clone())
         )?;
+
+        let Some(extracted_commit) = extracted_commit_maybe else {
+            panic!("Error unwrapping extracted commit")
+        };
 
         let _ = alice_group.process_incoming_message(extracted_commit.into());
         let received = alice_group.process_incoming_message(Arc::new(next_message))?;

@@ -553,7 +553,7 @@ impl MlsMessage {
         expected_outer_type: u8,
         expected_inner_type: Option<u8>,
         message: MlsMessage
-    ) -> Result<MlsMessage, MlsError>{
+    ) -> Result<Option<MlsMessage>, MlsError>{
         let ciphertext_maybe = message.into_ciphertext();
 
         let Some(ciphertext) = ciphertext_maybe else {
@@ -565,6 +565,10 @@ impl MlsMessage {
                     ciphertext.content_type as u8
                 )
             )
+        }
+
+        if ciphertext.authenticated_data.is_empty() {
+            return Ok(None)
         }
 
         let inner_message = MlsMessage::from_bytes( ciphertext.authenticated_data.as_slice() )?;
@@ -579,7 +583,7 @@ impl MlsMessage {
             );
         }
 
-        Ok(inner_message)
+        Ok(Some(inner_message))
     }
 }
 
