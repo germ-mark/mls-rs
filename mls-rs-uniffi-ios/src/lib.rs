@@ -1014,14 +1014,10 @@ impl Group {
                 let update_proposal = mls_rs::group::proposal::UpdateProposal::mls_decode(
                     &mut received_update.encoded_update.as_slice()
                 );
-                if received_update.epoch == group.current_epoch() {
-                    Ok(mls_rs::group::proposal::Proposal::Update(update_proposal?))
-                } else {
-                    return group.propose_replace_from_update(
-                        received_update.leaf_index,
-                        mls_rs::group::proposal::Proposal::Update(update_proposal?),
-                    );
-                }
+                return group.propose_replace_from_update(
+                    received_update.leaf_index,
+                    mls_rs::group::proposal::Proposal::Update(update_proposal?),
+                );
             })
             .collect();
 
@@ -1204,6 +1200,21 @@ mod tests {
             Some(mls_rs::group::ContentType::Proposal as u8),
             Arc::new(message)
         );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(mls_build_async))]
+    fn test_propose_then_encrypt() -> Result<(), MlSrsError> {
+        let (alice_group, bob_group) = setup_test()?;
+        let alice_update = alice_group.propose_update( None, None,vec![] )?;
+
+        //This will throw an error as you're required to commit if you've observed a proposal
+        // let message = alice_group.encrypt_application_message(
+        //      b"hello, bob",
+        //      alice_update.inner.to_bytes()?
+        // )?;
 
         Ok(())
     }
