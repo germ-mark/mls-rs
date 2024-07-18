@@ -40,6 +40,7 @@ use mls_rs_core::identity::{BasicCredential, IdentityProvider};
 use mls_rs_crypto_cryptokit::CryptoKitProvider;
 use mls_rs::mls_rs_codec::MlsDecode;
 use mls_rs::mls_rs_codec::MlsEncode;
+use config::{SigningIdentity, SignatureKeypair, SignatureSecretKey, CipherSuite, ExtensionList};
 
 uniffi::setup_scaffolding!();
 
@@ -80,82 +81,14 @@ pub enum MlSrsError {
     #[error("Unexpected message format")]
     UnexpecteMessageFormat,
     #[error("Inconsistent Optional Parameters")]
-    InconsistentOptionalParameters
+    InconsistentOptionalParameters,
+    #[error("Missing Basic Credential")]
+    MissingBasicCredential
 }
 
 impl IntoAnyError for MlSrsError {}
 
-/// A [`mls_rs::crypto::SignaturePublicKey`] wrapper.
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct SignaturePublicKey {
-    pub bytes: Vec<u8>,
-}
 
-impl From<mls_rs::crypto::SignaturePublicKey> for SignaturePublicKey {
-    fn from(public_key: mls_rs::crypto::SignaturePublicKey) -> Self {
-        Self {
-            bytes: public_key.to_vec(),
-        }
-    }
-}
-
-impl From<SignaturePublicKey> for mls_rs::crypto::SignaturePublicKey {
-    fn from(public_key: SignaturePublicKey) -> Self {
-        Self::new(public_key.bytes)
-    }
-}
-
-/// A [`mls_rs::crypto::SignatureSecretKey`] wrapper.
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct SignatureSecretKey {
-    pub bytes: Vec<u8>,
-}
-
-impl From<mls_rs::crypto::SignatureSecretKey> for SignatureSecretKey {
-    fn from(secret_key: mls_rs::crypto::SignatureSecretKey) -> Self {
-        Self {
-            bytes: secret_key.as_bytes().to_vec(),
-        }
-    }
-}
-
-impl From<SignatureSecretKey> for mls_rs::crypto::SignatureSecretKey {
-    fn from(secret_key: SignatureSecretKey) -> Self {
-        Self::new(secret_key.bytes)
-    }
-}
-
-/// A ([`SignaturePublicKey`], [`SignatureSecretKey`]) pair.
-#[derive(uniffi::Record, Clone, Debug)]
-pub struct SignatureKeypair {
-    cipher_suite: CipherSuite,
-    public_key: SignaturePublicKey,
-    secret_key: SignatureSecretKey,
-}
-
-/// A [`mls_rs::ExtensionList`] wrapper.
-#[derive(uniffi::Object, Debug, Clone)]
-pub struct ExtensionList {
-    _inner: mls_rs::ExtensionList,
-}
-
-impl From<mls_rs::ExtensionList> for ExtensionList {
-    fn from(inner: mls_rs::ExtensionList) -> Self {
-        Self { _inner: inner }
-    }
-}
-
-/// A [`mls_rs::Extension`] wrapper.
-#[derive(uniffi::Object, Debug, Clone)]
-pub struct Extension {
-    _inner: mls_rs::Extension,
-}
-
-impl From<mls_rs::Extension> for Extension {
-    fn from(inner: mls_rs::Extension) -> Self {
-        Self { _inner: inner }
-    }
-}
 
 /// A [`mls_rs::Group`] and [`mls_rs::group::NewMemberInfo`] wrapper.
 #[derive(uniffi::Record, Clone)]
@@ -368,35 +301,6 @@ pub struct ReceivedUpdate {
     pub encoded_update: Vec<u8> //mls_encoded UpdateProposal object containing a leaf_node
 }
 
-/// Supported cipher suites.
-///
-/// This is a subset of the cipher suites found in
-/// [`mls_rs::CipherSuite`].
-#[derive(Copy, Clone, Debug, uniffi::Enum)]
-pub enum CipherSuite {
-    // TODO(mgeisler): add more cipher suites.
-    Curve25519ChaCha,
-}
-
-impl From<CipherSuite> for mls_rs::CipherSuite {
-    fn from(cipher_suite: CipherSuite) -> mls_rs::CipherSuite {
-        match cipher_suite {
-            CipherSuite::Curve25519ChaCha => mls_rs::CipherSuite::CURVE25519_CHACHA,
-        }
-    }
-}
-
-impl TryFrom<mls_rs::CipherSuite> for CipherSuite {
-    type Error = MlSrsError;
-
-    fn try_from(cipher_suite: mls_rs::CipherSuite) -> Result<Self, Self::Error> {
-        match cipher_suite {
-            mls_rs::CipherSuite::CURVE25519_CHACHA => Ok(CipherSuite::Curve25519ChaCha),
-            _ => Err(MlsError::UnsupportedCipherSuite(cipher_suite))?,
-        }
-    }
-}
-
 /// Generate a MLS signature keypair.
 ///
 /// This will use the default mls-lite crypto provider.
@@ -469,7 +373,7 @@ impl Client {
             .with_encryption_options(encryption_options);
         let client = mls_rs::Client::builder()
             .crypto_provider(crypto_provider)
-            .identity_provider(basic::BasicIdentityProvider::new())
+            .identity_provider(client_config.identity_provider_storage.into())
             .signing_identity(signing_identity, secret_key.into(), cipher_suite.into())
             .key_package_repo(client_config.client_keypackage_storage.into())
             .group_state_storage(client_config.group_state_storage.into())
@@ -633,46 +537,6 @@ impl TryFrom<mls_rs::group::CommitOutput> for CommitOutput {
             group_info,
             unused_proposals
         })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Object)]
-#[uniffi::export(Eq)]
-pub struct SigningIdentity {
-    inner: identity::SigningIdentity,
-}
-
-impl From<identity::SigningIdentity> for SigningIdentity {
-    fn from(inner: identity::SigningIdentity) -> Self {
-        Self { inner }
-    }
-}
-
-#[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
-#[cfg_attr(mls_build_async, maybe_async::must_be_async)]
-#[uniffi::export]
-impl SigningIdentity {
-    #[uniffi::constructor]
-    pub fn new(
-        signature_key_data: Vec<u8>,
-        basic_credential: Vec<u8>,
-    ) -> Result<Self, MlSrsError> {
-        let signing_identity = identity::SigningIdentity::new(
-            identity::Credential::Basic(identity::BasicCredential{identifier: basic_credential}),
-            signature_key_data.into(),
-        );
-        Ok( signing_identity.into() )
-    }
-
-    pub fn basic_credential(&self) -> Option<Vec<u8>> {
-        match self.clone().inner.credential {
-            mls_rs::identity::Credential::Basic(basic_credential) => Some(basic_credential.identifier),
-            _ => None
-        }
-    }
-
-    pub fn node_signing_key(&self) -> SignaturePublicKey {
-        self.inner.signature_key.clone().into()
     }
 }
 
