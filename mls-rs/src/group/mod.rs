@@ -1347,7 +1347,10 @@ where
         // A group member that has observed one or more proposals within an epoch MUST send a Commit message
         // before sending application data
         #[cfg(feature = "by_ref_proposal")]
-        if !self.state.proposals.is_empty() {
+        // if !self.state.proposals.is_empty() {
+        //     return Err(MlsError::CommitRequired);
+        // }
+        if self.state.proposals.proposals.len() != self.state.proposals.own_proposals.len() {
             return Err(MlsError::CommitRequired);
         }
 
