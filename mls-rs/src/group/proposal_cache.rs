@@ -2646,7 +2646,6 @@ mod tests {
 
         assert_eq!(processed_proposals.0, Vec::new());
 
-        #[cfg(feature = "state_update")]
         assert_eq!(processed_proposals.1.unused_proposals, vec![proposal_info]);
     }
 
@@ -2741,7 +2740,6 @@ mod tests {
 
         assert_eq!(processed_proposals.0, vec![update_ref.into()]);
 
-        #[cfg(feature = "state_update")]
         assert_eq!(processed_proposals.1.unused_proposals, vec![replace_info]);
     }
 
@@ -2953,7 +2951,6 @@ mod tests {
 
         assert_eq!(processed_proposals.0, vec![remove_ref.into()]);
 
-        #[cfg(feature = "state_update")]
         assert_eq!(processed_proposals.1.unused_proposals, vec![replace_info]);
     }
 
@@ -3112,7 +3109,6 @@ mod tests {
 
         assert_eq!(processed_proposals.0, Vec::new());
 
-        #[cfg(feature = "state_update")]
         assert_eq!(processed_proposals.1.unused_proposals, vec![replace_info]);
     }
 
@@ -3166,7 +3162,6 @@ mod tests {
 
         assert_eq!(processed_proposals.0, Vec::new());
 
-        #[cfg(feature = "state_update")]
         assert_eq!(processed_proposals.1.unused_proposals, vec![replace_info]);
     }
 
