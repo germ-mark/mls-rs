@@ -15,11 +15,11 @@ use crate::{
 
 #[cfg(feature = "by_ref_proposal")]
 use crate::{
-    crypto::{HpkePublicKey},
+    crypto::HpkePublicKey,
     group::{
         message_hash::MessageHash,
         proposal_cache::{CachedProposal, ProposalCache},
-        ProposalMessageDescription, ProposalRef, PendingUpdate
+        PendingUpdate, ProposalMessageDescription, ProposalRef,
     },
     map::SmallMap,
 };

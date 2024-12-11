@@ -647,7 +647,7 @@ pub(crate) fn proposer_can_propose(
                 | ProposalType::GROUP_CONTEXT_EXTENSIONS
         ),
         #[cfg(feature = "replace_proposal")]
-         (Sender::Member(_), ProposalSource::ByReference(_)) => matches!(
+        (Sender::Member(_), ProposalSource::ByReference(_)) => matches!(
             proposal_type,
             ProposalType::ADD
                 | ProposalType::UPDATE

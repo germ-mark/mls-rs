@@ -9,8 +9,7 @@ use mls_rs::{
         basic::{BasicCredential, BasicIdentityProvider},
         SigningIdentity,
     },
-    CipherSuite, CipherSuiteProvider, Client, CryptoProvider, ExtensionList,
-    Group
+    CipherSuite, CipherSuiteProvider, Client, CryptoProvider, ExtensionList, Group,
 };
 
 const CIPHERSUITE: CipherSuite = CipherSuite::CURVE25519_AES128;

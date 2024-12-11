@@ -661,8 +661,7 @@ mod tests {
     use crate::group::proposal_ref::test_utils::auth_content_from_proposal;
     use crate::group::proposal_ref::ProposalRef;
     use crate::group::{
-        AddProposal, AuthenticatedContent, Content, ExternalInit, GroupContext,
-        Proposal,
+        AddProposal, AuthenticatedContent, Content, ExternalInit, GroupContext, Proposal,
         ProposalOrRef, ReInitProposal, RemoveProposal, Roster, Sender, UpdateProposal,
     };
     use crate::key_package::test_utils::test_key_package_with_signer;
