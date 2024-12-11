@@ -657,6 +657,7 @@ pub(crate) fn proposer_can_propose(
                 | ProposalType::RE_INIT
                 | ProposalType::GROUP_CONTEXT_EXTENSIONS
         ),
+        (Sender::External(_), ProposalSource::Local) => false,
         #[cfg(feature = "by_ref_proposal")]
         (Sender::External(_), ProposalSource::ByValue) => false,
         #[cfg(all(feature = "by_ref_proposal", not(feature = "replace_proposal")))]
@@ -669,7 +670,7 @@ pub(crate) fn proposer_can_propose(
                 | ProposalType::GROUP_CONTEXT_EXTENSIONS
         ),
         #[cfg(all(feature = "by_ref_proposal", feature = "replace_proposal"))]
-        (Sender::NewMemberCommit, ProposalSource::ByValue | ProposalSource::Local) => matches!(
+        (Sender::External(_), ProposalSource::ByReference(_)) => matches!(
             proposal_type,
             ProposalType::ADD
                 | ProposalType::REMOVE
