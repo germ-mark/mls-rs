@@ -1135,7 +1135,7 @@ mod tests {
 
         // Alice creates an Update proposal, including a fresh LeafNode
         let (mut alice_group, _) = alice.join_group(None, &output.welcome_messages[0])?;
-        let proposal = alice_group.update_proposal(None, None)?;
+        let proposal = alice_group.update_proposal(None, None, None)?;
         let Proposal::Update(update) = proposal else {
             panic!("non update proposal found")
         };
