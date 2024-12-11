@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use mls_rs_codec::{MlsDecode, MlsEncode, MlsSize};
 use mls_rs_core::error::IntoAnyError;
-#[cfg(feature = "last_resort_key_package_ext")]
+#[cfg(any(feature = "last_resort_key_package_ext", feature = "replace_proposal"))]
 use mls_rs_core::extension::MlsExtension;
 use mls_rs_core::identity::MemberValidationContext;
 use mls_rs_core::secret::Secret;
@@ -45,9 +45,6 @@ use crate::{
 
 #[cfg(feature = "replace_proposal")]
 use crate::extension::LeafNodeEpochExt;
-
-#[cfg(feature = "replace_proposal")]
-use mls_rs_core::extension::MlsExtension;
 
 use crate::extension::ExternalPubExt;
 
