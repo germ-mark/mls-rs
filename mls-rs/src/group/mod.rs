@@ -752,14 +752,7 @@ where
                 // let pending_update = self.pending_updates.get(&leaf_pk);
 
                 // Update the leaf in the private tree if this is our update
-                #[cfg(feature = "std")]
                 let pending_update = self.pending_updates.get(&leaf_pk);
-
-                #[cfg(not(feature = "std"))]
-                let new_leaf_sk_and_signer = self
-                    .pending_updates
-                    .iter()
-                    .find_map(|(pk, sk)| (pk == leaf_pk).then_some(sk));
 
                 let new_leaf_sk = pending_update.map(|upd| upd.secret_key.clone());
                 new_signer = pending_update.and_then(|upd| upd.signer.clone());
