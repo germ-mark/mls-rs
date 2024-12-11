@@ -38,7 +38,7 @@ pub(crate) struct Snapshot {
     epoch_secrets: EpochSecrets,
     key_schedule: KeySchedule,
     #[cfg(feature = "by_ref_proposal")]
-    pending_updates: SmallMap<HpkePublicKey, (HpkeSecretKey, PendingUpdate)>,
+    pending_updates: SmallMap<HpkePublicKey, PendingUpdate>,
     pending_commit: Option<CommitGeneration>,
     signer: SignatureSecretKey,
 }

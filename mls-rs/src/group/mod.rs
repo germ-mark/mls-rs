@@ -898,7 +898,11 @@ where
         signing_identity: Option<SigningIdentity>,
         leaf_node_extensions: Option<ExtensionList>,
     ) -> Result<Proposal, MlsError> {
-        let leaf_node = self.updated_leaf_node(signer, signing_identity).await?;
+        let leaf_node = self.updated_leaf_node(
+            signer,
+            signing_identity,
+            leaf_node_extensions)
+        .await?;
         Ok(Proposal::Update(UpdateProposal { leaf_node }))
     }
 
@@ -954,6 +958,7 @@ where
         &mut self,
         signer: Option<SignatureSecretKey>,
         signing_identity: Option<SigningIdentity>,
+        leaf_node_extensions: Option<ExtensionList>,
     ) -> Result<LeafNode, MlsError> {
         // Grab a copy of the current node and update it to have new key material
 

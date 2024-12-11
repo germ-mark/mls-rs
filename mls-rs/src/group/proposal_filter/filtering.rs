@@ -706,7 +706,7 @@ pub(crate) fn filter_out_invalid_proposers(
     #[cfg(feature = "replace_proposal")]
     for i in (0..proposals.replace_proposals().len()).rev() {
         let p = &proposals.replace_proposals()[i];
-        let res = proposer_can_propose(p.sender, ProposalType::REPLACE, p.is_by_reference());
+        let res = proposer_can_propose(p.sender, ProposalType::REPLACE, &p.source);
 
         if !apply_strategy(strategy, p.is_by_reference(), res)? {
             proposals.remove::<ReplaceProposal>(i);
