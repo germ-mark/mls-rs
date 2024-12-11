@@ -4528,19 +4528,19 @@ mod tests {
         assert_matches!(res, Err(MlsError::PendingCommitNotFound));
     }
 
-    #[cfg(feature = "by_ref_proposal")]
+    #[cfg(all(feature = "by_ref_proposal", feature="private_message"))]
     #[maybe_async::test(not(mls_build_async), async(mls_build_async, crate::futures_test))]
     async fn can_process_own_plaintext_proposal() {
         can_process_own_proposal(false).await;
     }
 
-    #[cfg(feature = "by_ref_proposal")]
+    #[cfg(all(feature = "by_ref_proposal", feature="private_message"))]
     #[maybe_async::test(not(mls_build_async), async(mls_build_async, crate::futures_test))]
     async fn can_process_own_ciphertext_proposal() {
         can_process_own_proposal(true).await;
     }
 
-    #[cfg(feature = "by_ref_proposal")]
+    #[cfg(all(feature = "by_ref_proposal", feature="private_message"))]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
     async fn can_process_own_proposal(encrypt_proposal: bool) {
         let (alice, _) = test_client_with_key_pkg_custom(
@@ -4599,7 +4599,7 @@ mod tests {
         assert!(groups[0].state.proposals.own_proposals.is_empty());
     }
 
-    #[cfg(feature = "by_ref_proposal")]
+    #[cfg(all(feature = "by_ref_proposal", feature="private_message"))]
     #[maybe_async::test(not(mls_build_async), async(mls_build_async, crate::futures_test))]
     async fn commit_required_is_true_when_proposals_pending() {
         let mut group = test_group(TEST_PROTOCOL_VERSION, TEST_CIPHER_SUITE).await;
