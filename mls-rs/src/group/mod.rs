@@ -2283,7 +2283,7 @@ mod tests {
         assert_eq!(
             update.leaf_node.ungreased_capabilities().sorted(),
             Capabilities {
-                extensions: vec![42.into()],
+                extensions,
                 ..get_test_capabilities()
             }
             .sorted()
