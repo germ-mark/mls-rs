@@ -960,7 +960,7 @@ where
         let mut new_leaf_node: LeafNode = self.current_user_leaf_node()?.clone();
         let new_leaf_node_extensions =
             leaf_node_extensions.unwrap_or(new_leaf_node.ungreased_extensions());
-        let properties = self.config.leaf_properties(new_leaf_node_extensions)
+        let properties = self.config.leaf_properties(new_leaf_node_extensions);
 
         #[cfg(feature = "replace_proposal")]
         let mut properties = properties;

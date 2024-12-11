@@ -265,7 +265,7 @@ where
                             .check_if_valid(
                                 leaf,
                                 ValidationContext::Update((
-                                    self.group_id,
+                                    &self.original_context.group_id,
                                     *to_replace,
                                     commit_time,
                                 )),
@@ -282,7 +282,7 @@ where
                             .valid_successor(
                                 &old_leaf.signing_identity,
                                 &leaf.signing_identity,
-                                group_extensions_in_use,
+                                new_extensions,
                             )
                             .await
                             .map_err(|e| MlsError::IdentityProviderError(e.into_any_error()))

@@ -19,7 +19,7 @@ use crate::{
     group::{
         message_hash::MessageHash,
         proposal_cache::{CachedProposal, ProposalCache},
-        ProposalMessageDescription, ProposalRef,
+        ProposalMessageDescription, ProposalRef, PendingUpdate
     },
     map::SmallMap,
 };
@@ -28,10 +28,6 @@ use mls_rs_codec::{MlsDecode, MlsEncode, MlsSize};
 use mls_rs_core::crypto::SignatureSecretKey;
 #[cfg(feature = "tree_index")]
 use mls_rs_core::identity::IdentityProvider;
-
-use super::{
-    state_repo::PendingUpdate,
-};
 
 #[derive(Debug, PartialEq, Clone, MlsEncode, MlsDecode, MlsSize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
