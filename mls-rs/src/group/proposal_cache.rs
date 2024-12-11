@@ -662,7 +662,7 @@ mod tests {
     use crate::group::proposal_ref::ProposalRef;
     use crate::group::{
         AddProposal, AuthenticatedContent, Content, ExternalInit, GroupContext,
-        LeafNodeEpochExt, Proposal,
+        Proposal,
         ProposalOrRef, ReInitProposal, RemoveProposal, Roster, Sender, UpdateProposal,
     };
     use crate::key_package::test_utils::test_key_package_with_signer;
@@ -813,7 +813,7 @@ mod tests {
             &test_cipher_suite_provider(TEST_CIPHER_SUITE),
             TEST_GROUP,
             leaf_index,
-            properties,
+            Some(properties),
             None,
             &signer,
         )
