@@ -972,7 +972,7 @@ where
         #[cfg(not(feature = "std"))]
         {
             self.pending_updates
-                .retain(|(pk, _upd)| *pk != leaf_node.public_key);
+                .retain(|pk, _upd| *pk != leaf_node.public_key);
         }
     }
 
