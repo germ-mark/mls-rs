@@ -284,6 +284,71 @@ mod legacy {
         pub commit_secret: PathSecret,
         pub commit_message_hash: MessageHash,
     }
+
+    //Germ Legacy
+    pub(crate) struct Snapshot {
+        pub version: u16,
+        pub(crate) state: RawGroupState,
+        pub private_tree: TreeKemPrivate,
+        pub epoch_secrets: EpochSecrets,
+        pub key_schedule: KeySchedule,
+        #[cfg(feature = "by_ref_proposal")]
+        pub pending_updates: SmallMap<HpkePublicKey, PendingUpdate>,
+        pub pending_commit: PendingCommitSnapshot,
+        pub signer: SignatureSecretKey,
+    }
+
+    // An enum to reflect whether cached private information related to an update is for an Update
+    // proposal or for a Replace proposal.  Update-related information is cleared on epoch change;
+    // Replace-related information is not.
+    #[derive(Copy, Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
+    #[repr(u8)]
+    enum PendingUpdateContext {
+        Update = 1u8,
+        Replace = 2u8,
+    }
+
+    #[derive(Clone, Debug, PartialEq, MlsEncode, MlsDecode, MlsSize)]
+    pub(crate) struct PendingUpdate {
+        context: PendingUpdateContext,
+        pub(crate) secret_key: HpkeSecretKey,
+        pub(crate) signer: Option<SignatureSecretKey>,
+    }
+
+    impl From<PendingUpdate> for (HpkeSecretKey, Option<SignatureSecretKey>) {
+        fn from(value: PendingUpdate) -> Self {
+            (value.secret_key, value.signer)
+        }
+    }
+}
+
+impl From<SmallMap<HpkePublicKey, legacy::PendingUpdate>>
+    for SmallMap<HpkePublicKey, (HpkeSecretKey, Option<SignatureSecretKey>)>
+{
+    fn from(values: SmallMap<HpkePublicKey, legacy::PendingUpdate>) -> Self {
+        let mut result =
+            SmallMap::<HpkePublicKey, (HpkeSecretKey, Option<SignatureSecretKey>)>::default();
+        for (key, value) in values.iter() {
+            result.insert(key.clone(), (*value).clone().into());
+        }
+
+        return result;
+    }
+}
+
+impl From<legacy::Snapshot> for Snapshot {
+    fn from(legacy: legacy::Snapshot) -> Self {
+        Snapshot {
+            version: legacy.version,
+            state: legacy.state,
+            private_tree: legacy.private_tree,
+            epoch_secrets: legacy.epoch_secrets,
+            key_schedule: legacy.key_schedule,
+            pending_updates: legacy.pending_updates.into(),
+            pending_commit_snapshot: legacy.pending_commit,
+            signer: legacy.signer,
+        }
+    }
 }
 
 #[cfg(test)]
