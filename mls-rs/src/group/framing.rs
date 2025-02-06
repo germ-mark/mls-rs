@@ -620,6 +620,14 @@ impl FramedContent {
     }
 }
 
+// Germ
+impl MlsMessage {
+    //help us work with the private message
+    pub fn private_message(&self) -> Option<PrivateMessage> {
+        self.clone().into_ciphertext()
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test_utils {
     #[cfg(feature = "private_message")]
