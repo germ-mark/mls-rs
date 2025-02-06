@@ -1299,6 +1299,41 @@ where
         self.format_for_wire(auth_content).await
     }
 
+    /// Encrypt an application message using the current group state.
+    ///
+    /// `authenticated_data` will be sent unencrypted along with the contents
+    /// of the proposal message.
+    /// variant of encrypt_application_message for backwards compatibility
+    /// with PairMLS where one could self-commit and send message
+    #[cfg(feature = "private_message")]
+    #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
+    pub async fn encrypt_application_message_germ(
+        &mut self,
+        message: &[u8],
+        authenticated_data: Vec<u8>,
+        allow_self_proposals: bool,
+    ) -> Result<MlsMessage, MlsError> {
+        // A group member that has observed one or more proposals within an epoch MUST send a Commit message
+        // before sending application data
+        #[cfg(feature = "by_ref_proposal")]
+        if !self.state.proposals.is_empty() && !allow_self_proposals {
+            return Err(MlsError::CommitRequired);
+        }
+
+        let auth_content = AuthenticatedContent::new_signed(
+            &self.cipher_suite_provider,
+            self.context(),
+            Sender::Member(*self.private_tree.self_index),
+            Content::Application(message.to_vec().into()),
+            &self.signer,
+            WireFormat::PrivateMessage,
+            authenticated_data,
+        )
+        .await?;
+
+        self.format_for_wire(auth_content).await
+    }
+
     #[cfg(feature = "private_message")]
     #[cfg_attr(not(mls_build_async), maybe_async::must_be_sync)]
     async fn decrypt_incoming_ciphertext(
