@@ -2,6 +2,7 @@
 // Copyright by contributors to this project.
 // SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+use crate::group::snapshot::legacy::LegacySnapshot;
 use crate::cipher_suite::CipherSuite;
 use crate::client_builder::{recreate_config, BaseConfig, ClientBuilder, MakeConfig};
 use crate::client_config::ClientConfig;
@@ -678,9 +679,17 @@ where
             .map_err(|e| MlsError::GroupStorageError(e.into_any_error()))?
             .ok_or(MlsError::GroupNotFound)?;
 
-        let snapshot = Snapshot::mls_decode(&mut &*snapshot)?;
+        let decoded = Snapshot::mls_decode(&mut &*snapshot);
 
-        Group::from_snapshot(self.config.clone(), snapshot).await
+        match decoded {
+            Ok(result) => Group::from_snapshot(self.config.clone(), result).await,
+            Err(_) => {
+                let legacy = LegacySnapshot::mls_decode(&mut &*snapshot)?;
+                Group::from_snapshot(self.config.clone(), legacy.into()).await
+            }
+        }
+
+        
     }
 
     /// Load an existing group state into this client using the

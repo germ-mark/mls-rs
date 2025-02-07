@@ -271,7 +271,7 @@ where
     }
 }
 
-mod legacy {
+pub(crate) mod legacy {
     use crate::{group::AuthenticatedContent, tree_kem::path_secret::PathSecret};
 
     use super::*;
@@ -286,7 +286,8 @@ mod legacy {
     }
 
     //Germ Legacy
-    pub(crate) struct Snapshot {
+    #[derive(MlsDecode)]
+    pub(crate) struct LegacySnapshot {
         pub version: u16,
         pub(crate) state: RawGroupState,
         pub private_tree: TreeKemPrivate,
@@ -336,8 +337,8 @@ impl From<SmallMap<HpkePublicKey, legacy::PendingUpdate>>
     }
 }
 
-impl From<legacy::Snapshot> for Snapshot {
-    fn from(legacy: legacy::Snapshot) -> Self {
+impl From<legacy::LegacySnapshot> for Snapshot {
+    fn from(legacy: legacy::LegacySnapshot) -> Self {
         Snapshot {
             version: legacy.version,
             state: legacy.state,
