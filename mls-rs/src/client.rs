@@ -2,11 +2,11 @@
 // Copyright by contributors to this project.
 // SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-use crate::group::snapshot::legacy::LegacySnapshot;
 use crate::cipher_suite::CipherSuite;
 use crate::client_builder::{recreate_config, BaseConfig, ClientBuilder, MakeConfig};
 use crate::client_config::ClientConfig;
 use crate::group::framing::MlsMessage;
+use crate::group::snapshot::legacy::LegacySnapshot;
 
 use crate::group::{cipher_suite_provider, validate_group_info_joiner, GroupInfo};
 use crate::group::{
@@ -688,8 +688,6 @@ where
                 Group::from_snapshot(self.config.clone(), legacy.into()).await
             }
         }
-
-        
     }
 
     /// Load an existing group state into this client using the

@@ -386,6 +386,13 @@ impl MlsMessage {
         }
     }
 
+    pub fn is_welcome(&self) -> bool {
+        match self.payload {
+            MlsMessagePayload::Welcome(_) => true,
+            _ => false,
+        }
+    }
+
     #[inline(always)]
     pub fn into_group_info(self) -> Option<GroupInfo> {
         match self.payload {
