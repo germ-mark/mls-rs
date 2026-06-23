@@ -21,8 +21,6 @@ mod swift {
 
     #[derive(Debug, Deserialize)]
     struct SwiftTargetInfo {
-        #[serde(rename = "unversionedTriple")]
-        pub unversioned_triple: String,
         #[serde(rename = "librariesRequireRPath")]
         pub libraries_require_rpath: bool,
     }
@@ -71,9 +69,6 @@ mod swift {
 
     pub fn configure() {
         let swift_target_info = get_target_info();
-        if swift_target_info.target.libraries_require_rpath {
-            panic!("Libraries require RPath! Change minimum MacOS value to fix.")
-        }
 
         swift_target_info
             .paths
@@ -82,6 +77,16 @@ mod swift {
             .for_each(|path| {
                 println!("cargo:rustc-link-search=native={}", path);
             });
+
+        // Xcode 26+ toolchains report `librariesRequireRPath: true` for any
+        // deployment target below 26.0 (it now flips to false only at 26.0),
+        // so bumping the minimum OS no longer clears the flag without forcing an
+        // iOS 26 / macOS 26 floor. The Swift runtime still ships in the OS at
+        // /usr/lib/swift, so embed that as an rpath — exactly what Xcode does for
+        // back-deployed apps — instead of aborting the build.
+        if swift_target_info.target.libraries_require_rpath {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+        }
     }
 
     fn get_sdk_root() -> String {
@@ -107,12 +112,14 @@ mod swift {
     pub fn link_package(package_name: &str, package_root: &str) {
         let profile = env::var("PROFILE").unwrap();
         let target = get_target_triple();
-
         let sdk_root = get_sdk_root();
+
+        let build_args = [
+            "build", "-c", &profile, "--sdk", &sdk_root, "--triple", &target,
+        ];
+
         if !Command::new("swift")
-            .args([
-                "build", "-c", &profile, "--sdk", &sdk_root, "--triple", &target,
-            ])
+            .args(build_args)
             .current_dir(package_root)
             .status()
             .unwrap()
@@ -121,12 +128,21 @@ mod swift {
             panic!("Failed to compile swift package {}", package_name);
         }
 
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let swift_target_info = get_target_info();
-        println!(
-            "cargo:rustc-link-search=native={}/{}.build/{}/{}",
-            manifest_dir, package_root, swift_target_info.target.unversioned_triple, profile
-        );
+        // Ask SwiftPM where it placed the build products instead of
+        // reconstructing the path. The Swift build engine in Xcode 26+ emits to
+        // .build/out/Products/<Config>/ rather than the legacy
+        // .build/<unversionedTriple>/<profile>/, so the hand-built path no
+        // longer resolves and the static lib can't be found at link time.
+        let bin_path = Command::new("swift")
+            .args(build_args)
+            .arg("--show-bin-path")
+            .current_dir(package_root)
+            .output()
+            .unwrap()
+            .stdout;
+        let bin_path = String::from_utf8(bin_path).unwrap();
+
+        println!("cargo:rustc-link-search=native={}", bin_path.trim());
         println!("cargo:rustc-link-lib=static={}", package_name);
     }
 }
